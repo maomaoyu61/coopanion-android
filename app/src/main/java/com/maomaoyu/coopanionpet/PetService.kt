@@ -533,7 +533,7 @@ class PetService : Service() {
         val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
         val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
         val by = (py - bh - (dens * 10f).toInt()).coerceAtLeast(0)
-        if (Math.abs(bx - lastBx) < 8 && Math.abs(by - lastBy) < 8) return
+        if (Math.abs(bx - lastBx) < 1 && Math.abs(by - lastBy) < 1) return
         lastBx = bx
         lastBy = by
         p.x = bx
@@ -712,74 +712,7 @@ class PetService : Service() {
         mic_ = null
         micParams_ = null
 
-        val cs = (dm.density * 40).toInt()
-        val cp = WindowManager.LayoutParams(
-            cs, cs,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = base.x + (base.width - cs) / 2
-            y = (base.y - size - cs - (dm.density * 16).toInt()).coerceAtLeast(0)
-        }
-        val cv = TextView(this).apply {
-            gravity = Gravity.CENTER
-            textSize = 17f
-            text = "\uD83D\uDCAC"
-            setTextColor(0xFFFFFFFF.toInt())
-            background = GradientDrawable().apply {
-                cornerRadius = resources.displayMetrics.density * 15
-                setColor(0xFFFFFFFF.toInt())
-                setStroke((resources.displayMetrics.density * 1.8f).toInt(), 0xFFBFD2F7.toInt())
-            }
-            alpha = 1f
-            val slop2 = ViewConfiguration.get(this@PetService).scaledTouchSlop
-            var mdX = 0f; var mdY = 0f; var moved2 = false
-            setOnTouchListener { v2, ev2 ->
-                val tp = btnParams_
-                if (tp == null) { false } else {
-                    when (ev2.actionMasked) {
-                        MotionEvent.ACTION_DOWN -> {
-                            mdX = ev2.rawX; mdY = ev2.rawY; moved2 = false; true
-                        }
-                        MotionEvent.ACTION_MOVE -> {
-                            if (abs(ev2.rawX - mdX) > slop2 || abs(ev2.rawY - mdY) > slop2) moved2 = true
-                            if (moved2) {
-                                tp.x = (tp.x + (ev2.rawX - mdX)).toInt()
-                                tp.y = (tp.y + (ev2.rawY - mdY)).toInt()
-                                mdX = ev2.rawX; mdY = ev2.rawY
-                                try { wm_?.updateViewLayout(btn_, tp) } catch (_: Exception) {}
-                                syncMic()
-                            }
-                            true
-                        }
-                        MotionEvent.ACTION_UP -> {
-                            if (!moved2) {
-                                server?.log("点了 💬 聊天输入")
-                                showChatInput()
-                            } else {
-                                saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
-                            }
-                            true
-                        }
-                        else -> false
-                    }
-                }
-            }
-            setOnClickListener {
-                server?.log("点了 💬 聊天输入")
-                try {
-                    startActivity(Intent(this@PetService, ChatInputActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                } catch (_: Exception) {
-                }
-            }
-        }
-        try { wm.addView(cv, cp) } catch (_: Exception) {}
-        chat_ = cv
-        chatParams_ = cp
+        // 💬 悬浮按钮已移除：双击桌宠即可打开对话框（少一个钮更干净）
     }
 
     /** 主窗口每次变动后，把按钮重新提到最上层，否则会被全屏窗口压住点不到。 */
@@ -834,7 +767,7 @@ class PetService : Service() {
             setStroke((dm.density * 1.8f).toInt(),
                 if (gray) 0xFFC7CEDA.toInt() else 0xFFBFD2F7.toInt())
         }
-        v.text = if (gray) "\uD83D\uDD90" else "\uD83D\uDC3E"
+        v.text = if (gray) "用" else "摸"
         v.alpha = 1f
     }
 

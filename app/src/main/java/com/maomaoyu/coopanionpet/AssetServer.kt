@@ -264,8 +264,10 @@ class AssetServer(private val ctx: Context) {
                     "followCursor:function(){return Promise.resolve(null);}," +
                     "sampleBackdrop:function(){return new Array(300).fill(255);}" +
                     "};</script>"
-                val posJs = "<script>(function(){var last=0,lx=-1,ly=-1;" +
-                    "function tick(ts){if(ts-last>400){last=ts;" +
+                val killJs = "<script>window.addEventListener(\"dblclick\",function(e){" +
+                    "e.stopPropagation();e.preventDefault();},true);</script>"
+                val posJs = killJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1;" +
+                    "function tick(ts){if(ts-last>33){last=ts;" +
                     "var e=document.querySelector(\"#pet\");" +
                     "if(e\u0026\u0026window.AndroidPet\u0026\u0026window.AndroidPet.pos){" +
                     "var r=e.getBoundingClientRect();" +
