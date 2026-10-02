@@ -487,9 +487,10 @@ class PetService : Service() {
                                 val pw = a[2].toFloat() * dens
                                 val sw = resources.displayMetrics.widthPixels
                                 val bh = if (b.height > 0) b.height else (dens * 64).toInt()
-                                val bx = (px + pw / 2f - p.width / 2f).toInt()
+                                val bx = px.toInt() + pw.toInt() / 2 - p.width / 2
                                 p.x = bx.coerceIn(0, (sw - p.width).coerceAtLeast(0))
-                                p.y = (py - bh - (dens * 10).toInt()).coerceAtLeast(0)
+                                val by = py.toInt() - bh - (dens * 10f).toInt()
+                                p.y = by.coerceAtLeast(0)
                                 wm.updateViewLayout(b, p)
                             } catch (_: Exception) {
                             }
