@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.4 ===")
+        s.log("=== PetService 启动 v3.6 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -577,7 +577,19 @@ class PetService : Service() {
         val sw = resources.displayMetrics.widthPixels
         val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
         val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
-        val by = (py - bh - (dens * 10f).toInt()).coerceAtLeast(0)
+        // 状态条贴她头顶，气泡再叠在状态条上方
+        val sv = status_
+        val sp = statusParams_
+        var top = py - (dens * 10f).toInt()
+        if (sv != null && sp != null && sv.visibility == android.view.View.VISIBLE) {
+            val sh = if (sv.height > 0) sv.height else (dens * 22f).toInt()
+            val sy = (top - sh).coerceAtLeast(0)
+            sp.x = ((sw - sp.width) / 2).coerceAtLeast(0)
+            sp.y = sy
+            try { wm.updateViewLayout(sv, sp) } catch (_: Exception) {}
+            top = sy - (dens * 6f).toInt()
+        }
+        val by = (top - bh).coerceAtLeast(0)
         if (Math.abs(bx - lastBx) < 1 && Math.abs(by - lastBy) < 1) return
         lastBx = bx
         lastBy = by
