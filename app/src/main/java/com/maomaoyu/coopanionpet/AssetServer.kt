@@ -29,6 +29,16 @@ class AssetServer(private val ctx: Context) {
     private var walkSide = false
     private var saySeq = 0
     private val logs = ArrayDeque<String>()
+    private var lastDropLogAt = 0L
+
+    /** 未连接时丢消息也要留个痕迹，否则又变成"静默失效"。 */
+    private fun noPet(what: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastDropLogAt > 10000) {
+            lastDropLogAt = now
+            log("桌宠未连接，已丢弃: " + what.take(30))
+        }
+    }
 
     /** 由 Service 提供：在桌宠网页里执行一段 JS（用于排错）。 */
     var onEval: ((String) -> Unit)? = null
@@ -53,7 +63,8 @@ class AssetServer(private val ctx: Context) {
     }
 
     private fun sendJson(json: String) {
-        val o = petOut ?: return
+        val o = petOut
+        if (o == null) { noPet("send"); return }
         try {
             sendFrame(o, 0x1, json.toByteArray(Charsets.UTF_8))
         } catch (_: Exception) {
@@ -84,7 +95,8 @@ class AssetServer(private val ctx: Context) {
 
     /** 让桌宠说话（可带动作）。 */
     fun sendSay(text: String, actions: List<String> = emptyList()) {
-        val out = petOut ?: return
+        val out = petOut
+        if (out == null) { noPet("send"); return }
         saySeq++
         val beat = JSONObject().apply {
             put("text", text)
@@ -101,7 +113,8 @@ class AssetServer(private val ctx: Context) {
 
     /** 提问（own=true 时气泡里会出现输入框，用户可以打字）。 */
     fun sendAsk(question: String, options: List<String>, own: Boolean) {
-        val out = petOut ?: return
+        val out = petOut
+        if (out == null) { noPet("send"); return }
         saySeq++
         val msg = JSONObject().apply {
             put("t", "ask")
@@ -115,7 +128,8 @@ class AssetServer(private val ctx: Context) {
 
     /** 头顶转圈（思考中）。 */
     fun sendThinking(on: Boolean) {
-        val out = petOut ?: return
+        val out = petOut
+        if (out == null) { noPet("send"); return }
         val msg = JSONObject().apply { put("t", "thinking"); put("on", on) }
         rawToPet(out, msg.toString())
     }
@@ -123,7 +137,8 @@ class AssetServer(private val ctx: Context) {
     private fun rawToPet(out: java.io.OutputStream, json: String) {
         try {
             synchronized(out) { sendText(out, json) }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("⚠ 发给桌宠失败(" + e.javaClass.simpleName + ") → 关掉连接让它自动重连")
             petOut = null
             // 关键：必须把连接关掉，网页端的 onclose 才会触发自动重连；
             // 只置空 petOut 会让双方都以为还连着 → 永久静默
@@ -152,14 +167,16 @@ class AssetServer(private val ctx: Context) {
 
     /** 让桌宠播放"走路"动画（窗口移动由 PetService 负责）。 */
     fun petWalk(run: Boolean = false) {
-        val out = petOut ?: return
+        val out = petOut
+        if (out == null) { noPet("send"); return }
         walkSeq++
         walkSide = !walkSide
         val to = if (walkSide) 0.12 else 0.88
         val json = "{\"t\":\"walk\",\"id\":\"w$walkSeq\",\"to\":$to,\"run\":$run}"
         try {
             synchronized(out) { sendText(out, json) }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            log("⚠ 发给桌宠失败(" + e.javaClass.simpleName + ") → 关掉连接让它自动重连")
             petOut = null
             // 关键：必须把连接关掉，网页端的 onclose 才会触发自动重连；
             // 只置空 petOut 会让双方都以为还连着 → 永久静默

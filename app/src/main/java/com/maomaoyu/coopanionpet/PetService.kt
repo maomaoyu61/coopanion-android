@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.12 ===")
+        s.log("=== PetService 启动 v3.13 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -683,6 +683,7 @@ class PetService : Service() {
 
     private var status_: TextView? = null
     private var statusParams_: WindowManager.LayoutParams? = null
+    private var dshOk = true
     private var dshState = ""
     private var dshStatus = ""
     private var lastUserAt = System.currentTimeMillis()
