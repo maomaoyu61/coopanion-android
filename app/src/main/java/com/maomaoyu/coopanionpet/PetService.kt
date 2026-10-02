@@ -15,15 +15,19 @@ import android.view.Gravity
 import android.view.WindowManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 
 /**
- * 桌宠本体：一个置顶的透明悬浮窗（屏幕底边一条），里面是加载本地
- * web 资源的 WebView —— 渲染的就是 Coopanion 上游那份桌宠网页。
- * 窗口只占底边一条，所以其它区域的触摸会正常透传给你正在用的 App。
+ * 桌宠本体。
+ *
+ * 窗口**只有桌宠那么大**（不是整屏宽的条带），完全透明、置顶，
+ * 可以拖到屏幕任何位置（拖动逻辑在 PetContainer 里）。
+ * 里面是加载上游桌宠网页的透明 WebView。
  */
 class PetService : Service() {
 
-    private var web: WebView? = null
+    private var container_: PetContainer? = null
+    private var web_: WebView? = null
     private var server: AssetServer? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -42,22 +46,29 @@ class PetService : Service() {
         s.start()
         server = s
         lastPort = s.port
-        attachOverlay(s.port)
+        attachPet(s.port)
     }
 
-    private fun attachOverlay(port: Int) {
+    private fun attachPet(port: Int) {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val height = (resources.displayMetrics.density * 200).toInt()
+        val dm = resources.displayMetrics
+        val petW = (dm.density * 150).toInt()
+        val petH = (dm.density * 260).toInt()
+
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            height,
+            petW,
+            petH,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.BOTTOM or Gravity.START }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (dm.widthPixels - petW) / 2
+            y = dm.heightPixels - petH - (dm.density * 40).toInt()
+        }
 
-        val view = WebView(this).apply {
+        val web = WebView(this).apply {
             setBackgroundColor(0x00000000)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -66,10 +77,18 @@ class PetService : Service() {
             settings.allowContentAccess = true
             webViewClient = WebViewClient()
         }
-        view.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
+        web.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
+
+        val box = PetContainer(this, wm, params)
+        box.setBackgroundColor(0x00000000)
+        box.addView(web, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT))
+
         try {
-            wm.addView(view, params)
-            web = view
+            wm.addView(box, params)
+            container_ = box
+            web_ = web
         } catch (e: Exception) {
             stopSelf()
         }
@@ -78,17 +97,15 @@ class PetService : Service() {
     private fun createChannel() {
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel),
-                NotificationManager.IMPORTANCE_LOW)
-            nm.createNotificationChannel(ch)
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_ID, getString(R.string.notif_channel),
+                    NotificationManager.IMPORTANCE_LOW))
         }
     }
 
     private fun buildNotification(): Notification {
         val open = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
-        )
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -97,7 +114,7 @@ class PetService : Service() {
         }
         return builder
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("桌宠正在运行（点开可停止）")
+            .setContentText("桌宠在跑（可以拖到任意位置）")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(open)
             .setOngoing(true)
@@ -106,10 +123,12 @@ class PetService : Service() {
 
     override fun onDestroy() {
         try {
-            web?.let { (getSystemService(Context.WINDOW_SERVICE) as WindowManager).removeView(it) }
-        } catch (_: Exception) {}
-        web?.destroy()
-        web = null
+            container_?.let { (getSystemService(Context.WINDOW_SERVICE) as WindowManager).removeView(it) }
+        } catch (_: Exception) {
+        }
+        web_?.destroy()
+        web_ = null
+        container_ = null
         server?.stop()
         server = null
         super.onDestroy()
@@ -118,7 +137,7 @@ class PetService : Service() {
     companion object {
         private const val NOTIF_ID = 1101
         private const val CHANNEL_ID = "coopanion_pet"
-        /** 最近一次启动时本地服务的端口，装扮页要用同一个端口。 */
+        @Volatile
         var lastPort: Int = 0
     }
 }

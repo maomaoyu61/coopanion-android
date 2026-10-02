@@ -161,7 +161,7 @@ class AssetServer(private val ctx: Context) {
         if (query.contains("role=pet")) {
             val skin = prefs.getString("skin", null)
             val theme = prefs.getString("prefs", null)
-            val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":true,\"sound\":false")
+            val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":false,\"sound\":false")
             if (theme != null && theme.contains("dark")) sb.append(",\"theme\":\"dark\"")
             if (skin != null && skin.length > 2) {
                 // 装扮页 POST 的是 {"skin":{...}}，这里取内层对象
