@@ -17,12 +17,14 @@ import android.speech.tts.TextToSpeech
 import java.util.Locale
 import android.os.Looper
 import android.view.Gravity
+import android.view.ViewGroup
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.TextView
 import kotlin.math.abs
