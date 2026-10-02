@@ -13,6 +13,8 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
@@ -51,6 +53,8 @@ class PetService : Service() {
     private var btnParams_: WindowManager.LayoutParams? = null
     private var btnMoved = false
     private val handler = Handler(Looper.getMainLooper())
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
     private val brain by lazy { Brain(this) }
     private var voice: android.speech.SpeechRecognizer? = null
     private val longPress = Runnable { startVoice() }
@@ -72,6 +76,12 @@ class PetService : Service() {
         } else {
             startForeground(NOTIF_ID, buildNotification())
         }
+        tts = TextToSpeech(this) { status ->
+            ttsReady = status == TextToSpeech.SUCCESS
+            if (ttsReady) {
+                try { tts?.language = Locale.CHINESE } catch (_: Exception) {}
+            }
+        }
         val s = AssetServer(this)
         s.start()
         server = s
@@ -81,6 +91,17 @@ class PetService : Service() {
                 handleUserText(text)
             }
 
+            override fun onPetControl(action: String) {
+                when (action) {
+                    "dress" -> try {
+                        startActivity(Intent(this@PetService, DressActivity::class.java)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    } catch (_: Exception) {
+                    }
+                    "quit" -> stopSelf()
+                }
+            }
+
             override fun onPetTouch() {
             }
 
@@ -88,10 +109,10 @@ class PetService : Service() {
                 handler.postDelayed({
                     val srv = server ?: return@postDelayed
                     if (brain.configured()) {
-                        srv.sendSay("我在这儿～ 想聊点什么？", listOf("hop"))
+                        say("我在这儿～ 想聊点什么？", listOf("hop"))
                         srv.sendAsk("想聊什么呀？", listOf("随便聊聊", "夸夸我", "讲个冷笑话"), true)
                     } else {
-                        srv.sendSay("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。", listOf("nod"))
+                        say("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。", listOf("nod"))
                     }
                 }, 1600)
             }
@@ -243,6 +264,17 @@ class PetService : Service() {
         if (prefs.getBoolean("btn_collapsed", false)) collapseButton()
     }
 
+    /** 让桌宠说一句：气泡 + 动作（上游）+ 本地朗读（TTS）。 */
+    private fun say(text: String, actions: List<String> = emptyList()) {
+        server?.sendSay(text, actions)
+        if (ttsReady && text.isNotBlank()) {
+            try {
+                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "pet")
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     /** 用户说的话（打字或语音）→ 交给 Brain → 让桌宠说出来。 */
     private fun handleUserText(text: String) {
         if (text.isBlank()) return
@@ -252,7 +284,7 @@ class PetService : Service() {
             val reply = brain.ask(text)
             handler.post({
                 server?.sendThinking(false)
-                if (!reply.isNullOrBlank()) server?.sendSay(reply, listOf("nod"))
+                if (!reply.isNullOrBlank()) say(reply, listOf("nod"))
             })
         }, "brain").start()
     }
@@ -261,7 +293,7 @@ class PetService : Service() {
     private fun startVoice() {
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            server?.sendSay("先去 App 里给我麦克风权限吧～", listOf("nod"))
+            say("先去 App 里给我麦克风权限吧～", listOf("nod"))
             return
         }
         try {
@@ -270,7 +302,7 @@ class PetService : Service() {
             voice = sr
             sr.setRecognitionListener(object : android.speech.RecognitionListener {
                 override fun onReadyForSpeech(params: android.os.Bundle?) {
-                    server?.sendSay("我在听…", listOf("look"))
+                    say("我在听…", listOf("look"))
                 }
 
                 override fun onBeginningOfSpeech() {}
@@ -282,7 +314,7 @@ class PetService : Service() {
 
                 override fun onError(error: Int) {
                     sr.destroy(); voice = null
-                    server?.sendSay("没听清～再长按我一下？", listOf("nod"))
+                    say("没听清～再长按我一下？", listOf("nod"))
                 }
 
                 override fun onResults(results: android.os.Bundle?) {
@@ -300,7 +332,7 @@ class PetService : Service() {
             }
             sr.startListening(i)
         } catch (e: Exception) {
-            server?.sendSay("语音没起来…（${e.javaClass.simpleName}）", listOf("nod"))
+            say("语音没起来…（${e.javaClass.simpleName}）", listOf("nod"))
         }
     }
 
@@ -435,6 +467,8 @@ class PetService : Service() {
             root_?.let { wm_?.removeView(it) }
         } catch (_: Exception) {
         }
+        try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
+        tts = null
         try { voice?.destroy() } catch (_: Exception) {}
         voice = null
         try { btn_?.let { wm_?.removeView(it) } } catch (_: Exception) {}

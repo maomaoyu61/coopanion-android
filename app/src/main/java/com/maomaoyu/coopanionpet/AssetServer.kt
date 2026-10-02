@@ -31,6 +31,7 @@ class AssetServer(private val ctx: Context) {
     /** 桌宠发来的事件（打字、摸它、上线…）交给上层处理。 */
     interface PetEvents {
         fun onPetText(text: String)
+        fun onPetControl(action: String)
         fun onPetTouch()
         fun onPetHello()
         fun onPetOther(type: String, raw: String)
@@ -95,6 +96,7 @@ class AssetServer(private val ctx: Context) {
                     if (s.isNotBlank()) events?.onPetText(s) else events?.onPetOther("commit", msg)
                 }
                 "touch" -> events?.onPetTouch()
+                "control" -> events?.onPetControl(o.optString("action"))
                 "hello" -> events?.onPetHello()
                 else -> events?.onPetOther(o.optString("t"), msg)
             }
@@ -197,6 +199,7 @@ class AssetServer(private val ctx: Context) {
                     reply(out, 200, "application/json", p ?: "{}")
                 }
                 path == "/api/avatar" -> reply(out, 404, "text/plain", "no avatar")
+                path == "/dress" -> serveAsset(out, "/web/dress.html")
                 else -> serveAsset(out, if (path == "/" || path.isEmpty()) "/web/pet.html" else path)
             }
         } catch (_: Exception) {
@@ -267,7 +270,9 @@ class AssetServer(private val ctx: Context) {
             petOut = out
             val skin = prefs.getString("skin", null)
             val theme = prefs.getString("prefs", null)
-            val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":\"free\",\"sound\":false")
+            val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":\"free\",\"sound\":true")
+            sb.append(",\"bot\":{\"name\":\"大肥鱼\",\"controls\":true,\"paused\":false,\"quitLabel\":\"退出桌宠\",")
+            sb.append("\"buttons\":{\"dress\":true,\"pause\":false,\"settings\":false,\"quit\":true}}")
             if (theme != null && theme.contains("dark")) sb.append(",\"theme\":\"dark\"")
             if (skin != null && skin.length > 2) {
                 // 装扮页 POST 的是 {"skin":{...}}，这里取内层对象
@@ -311,6 +316,12 @@ class AssetServer(private val ctx: Context) {
                     val n = input.read(payload, got, len - got)
                     if (n <= 0) break
                     got += n
+                }
+                // 浏览器发来的帧是带掩码的，必须还原，否则全是乱码
+                if (masked) {
+                    for (i in 0 until len) {
+                        payload[i] = (payload[i].toInt() xor mask[i % 4].toInt()).toByte()
+                    }
                 }
                 when (opcode) {
                     0x1 -> handleIncoming(String(payload, Charsets.UTF_8))
