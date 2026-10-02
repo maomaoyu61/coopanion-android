@@ -498,6 +498,7 @@ class PetService : Service() {
         p.height = want
         p.y = statusBar
         try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
+        raiseBubble()
         raiseButtons()
         if (on) say("我在这儿呢，你说～")
     }
@@ -515,6 +516,7 @@ class PetService : Service() {
             try { web_?.requestFocus() } catch (_: Exception) {}
         }
         try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
+        raiseBubble()
         raiseButtons()
     }
 
