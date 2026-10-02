@@ -32,6 +32,10 @@ class PetContainer(
     private var dragging = false
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
 
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {

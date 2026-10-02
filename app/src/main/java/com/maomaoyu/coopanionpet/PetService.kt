@@ -26,11 +26,13 @@ import kotlin.random.Random
 /**
  * 桌宠本体。
  *
- * - 窗口**就是桌宠大小**（三档可调），透明置顶，可在整个屏幕上自己溜达、也能手拖。
- * - 走动 = 移动窗口本身（移植版同思路），同时给桌宠发左右交替的 walk 消息让它播走路动画。
- * - 网页内部漫游关掉（roam:"off"），否则它会在小窗口里撞墙。
- * - **轻点桌宠时窗口向上临时撑开**（底边不动，所以桌宠位置不变），
- *   这样长按菜单/气泡才有地方显示、不会被窗口裁掉。
+ * - 窗口就是桌宠大小（固定最小档 100x170dp），透明置顶，可全屏拖动、也会自己溜达。
+ * - **腿的动画交给上游自己**：app 里给桌宠发 `roam:"free"`，它就会在窗口内自己走动/小跑
+ *   （之前我关掉 roam 想防它撞墙，结果把动画也关了 —— 撞墙没关系，窗口本身在移动，
+ *   看上去就是它在屏幕上走）。
+ * - 走动 = 移动窗口本身；另外每 400ms 用 JS 量一次菜单/气泡的真实尺寸，
+ *   **按需把窗口撑到刚好装下**（底边和左边不动 → 桌宠屏幕位置不变），
+ *   菜单/二级菜单就不会再被裁掉。
  */
 class PetService : Service() {
 
@@ -46,14 +48,14 @@ class PetService : Service() {
     private var targetX = 0f
     private var targetY = 0f
     private var moving = false
-    private var tick = 0
     private var userDragging = false
-    private var expanded = false
     private var petW = 0
     private var petH = 0
     private var screenW = 0
     private var screenH = 0
     private var density = 1f
+    private var menuUp = 0
+    private var menuRight = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -72,12 +74,7 @@ class PetService : Service() {
         lastPort = s.port
         attachPet(s.port)
         handler.postDelayed(roamTick, 2500)
-    }
-
-    private fun sizeOf(index: Int): Pair<Int, Int> = when (index) {
-        0 -> (100 * density).toInt() to (170 * density).toInt()
-        2 -> (150 * density).toInt() to (260 * density).toInt()
-        else -> (120 * density).toInt() to (205 * density).toInt()
+        handler.postDelayed(uiWatch, 1500)
     }
 
     private fun attachPet(port: Int) {
@@ -87,11 +84,8 @@ class PetService : Service() {
         density = dm.density
         screenW = dm.widthPixels
         screenH = dm.heightPixels
-
-        val idx = getSharedPreferences("pet", Context.MODE_PRIVATE).getInt("size", 1)
-        val (w, h) = sizeOf(idx)
-        petW = w
-        petH = h
+        petW = (density * 100).toInt()
+        petH = (density * 170).toInt()
 
         val params = WindowManager.LayoutParams(
             petW, petH,
@@ -102,7 +96,7 @@ class PetService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = (screenW - petW) / 2
-            y = screenH - petH - (dm.density * 48).toInt()
+            y = screenH - petH - (density * 48).toInt()
         }
         params_ = params
         curX = params.x.toFloat()
@@ -131,17 +125,14 @@ class PetService : Service() {
         val container = PetContainer(this, wm, params, { dragging ->
             userDragging = dragging
             if (!dragging) {
-                collapseMenuRoom()
                 val p = params_
                 if (p != null) {
                     curX = p.x.toFloat()
-                    curY = p.y.toFloat()
+                    curY = (p.y + menuUp).toFloat()
                 }
                 handler.removeCallbacks(roamTick)
-                handler.postDelayed(roamTick, 2500)
+                handler.postDelayed(roamTick, 2000)
             }
-        }, {
-            expandForMenu()   // 轻点：撑开上方空间，菜单才不会被裁
         })
         container.setBackgroundColor(0x00000000)
         container.addView(web, FrameLayout.LayoutParams(
@@ -164,75 +155,78 @@ class PetService : Service() {
         }, 900)
     }
 
-    /* ---------- 轻点：临时向上撑开，给菜单/气泡留位置 ---------- */
+    /* -------- 按需把窗口撑到刚好装下菜单/气泡 -------- */
 
-    private fun expandForMenu() {
-        val p = params_ ?: return
-        val extra = (density * 300).toInt()
-        if (!expanded) {
-            expanded = true
-            p.height = petH + extra
-            p.y = curY.toInt() - extra          // 底边不动 → 桌宠位置不变
+    private val uiWatch = object : Runnable {
+        override fun run() {
+            try {
+                web_?.evaluateJavascript(JS_MEASURE) { r -> applyUiBounds(r) }
+            } catch (_: Exception) {
+            }
+            handler.postDelayed(this, 400)
         }
+    }
+
+    private fun applyUiBounds(result: String?) {
+        val p = params_ ?: return
+        var up = 0
+        var right = 0
+        val raw = result?.trim()?.trim('"')
+        if (raw != null && raw.startsWith("[") && raw.endsWith("]")) {
+            val nums = raw.trim('[', ']').split(",").mapNotNull { it.trim().toFloatOrNull() }
+            if (nums.size == 4) {
+                up = (nums[1] * density).toInt().coerceAtLeast(0)
+                val needRight = (nums[2] * density).toInt() - petW
+                right = needRight.coerceAtLeast(0)
+            }
+        }
+        up = up.coerceIn(0, (density * 430).toInt())
+        right = right.coerceIn(0, (density * 240).toInt())
+        if (up == menuUp && right == menuRight) return
+        menuUp = up
+        menuRight = right
+        p.y = curY.toInt() - menuUp
+        p.height = petH + menuUp
+        p.width = petW + menuRight
         try {
             wm_?.updateViewLayout(box_, p)
         } catch (_: Exception) {
         }
-        handler.removeCallbacks(collapseRunnable)
-        handler.postDelayed(collapseRunnable, 9000)
     }
 
-    private val collapseRunnable = Runnable { collapseMenuRoom() }
-
-    private fun collapseMenuRoom() {
-        val p = params_ ?: return
-        if (!expanded) return
-        expanded = false
-        p.height = petH
-        p.y = curY.toInt()
-        try {
-            wm_?.updateViewLayout(box_, p)
-        } catch (_: Exception) {
-        }
-    }
-
-    /* ---------- 全屏漫游 ---------- */
+    /* -------- 全屏漫游（只动窗口；腿的动画由网页自己放） -------- */
 
     private val roamTick = object : Runnable {
         override fun run() {
-            if (userDragging || expanded) {
-                handler.postDelayed(this, 500)
+            if (userDragging) {
+                handler.postDelayed(this, 400)
                 return
             }
             if (!moving) {
-                targetX = Random.nextFloat() * (screenW - petW).coerceAtLeast(1)
+                targetX = Random.nextFloat() * (screenW - petW - menuRight).coerceAtLeast(1)
                 targetY = Random.nextFloat() * (screenH - petH).coerceAtLeast(1)
                 moving = true
-                tick = 0
-                server?.petWalk(Random.nextBoolean())
             }
             val dx = targetX - curX
             val dy = targetY - curY
             val dist = hypot(dx, dy)
             if (dist < 6f) {
                 moving = false
-                handler.postDelayed(this, 1800L + Random.nextLong(4200))
+                handler.postDelayed(this, 2200L + Random.nextLong(3800))
                 return
             }
-            val step = min(dist, screenW / 90f)
+            val step = min(dist, screenW / 130f)
             curX += dx / dist * step
             curY += dy / dist * step
             val p = params_
             if (p != null) {
                 p.x = curX.toInt()
-                p.y = curY.toInt()
+                p.y = curY.toInt() - menuUp
                 try {
                     wm_?.updateViewLayout(box_, p)
                 } catch (_: Exception) {
                 }
             }
-            // 约每 0.55 秒补一条 walk（左右交替），走路动画就不断
-            if (tick++ % 16 == 0) server?.petWalk(false)
             handler.postDelayed(this, 33)
         }
     }
@@ -257,7 +251,7 @@ class PetService : Service() {
         }
         return builder
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("桌宠在跑（可拖动、会溜达；轻点它可展开菜单）")
+            .setContentText("桌宠在跑（可拖动、会溜达）")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(open)
             .setOngoing(true)
@@ -281,7 +275,30 @@ class PetService : Service() {
     companion object {
         private const val NOTIF_ID = 1101
         private const val CHANNEL_ID = "coopanion_pet"
+
         @Volatile
         var lastPort: Int = 0
+
+        /** 量菜单/气泡/选项面板的真实边界（CSS px，视口坐标）。 */
+        private const val JS_MEASURE = """
+(function(){
+  var sels=['.menu','.bubble','.ask','.b-opts','.b-own','.b-hint'];
+  var l=1e9,t=1e9,r=-1e9,b=-1e9,found=false;
+  for (var i=0;i<sels.length;i++){
+    var els=document.querySelectorAll(sels[i]);
+    for (var j=0;j<els.length;j++){
+      var e=els[j];
+      if (e.hidden || e.offsetParent===null) continue;
+      var cs=getComputedStyle(e);
+      if (cs.display==='none'||cs.visibility==='hidden'||parseFloat(cs.opacity)<0.05) continue;
+      var q=e.getBoundingClientRect();
+      if (q.width<2||q.height<2) continue;
+      found=true;
+      if(q.left<l)l=q.left; if(q.top<t)t=q.top; if(q.right>r)r=q.right; if(q.bottom>b)b=q.bottom;
+    }
+  }
+  return found ? ('['+[Math.floor(l),Math.floor(t),Math.ceil(r),Math.ceil(b)].join(',')+']') : 'null';
+})()
+"""
     }
 }
