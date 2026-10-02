@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.6 ===")
+        s.log("=== PetService 启动 v3.7 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -652,7 +652,6 @@ class PetService : Service() {
         try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
         raiseBubble()
         raiseButtons()
-        if (on) say("我在这儿呢，你说～")
     }
 
     /** 页面要输入时临时让窗口可聚焦（键盘才能弹出来），输入结束再变回不抢焦点。 */
