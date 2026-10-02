@@ -24,6 +24,7 @@ class AssetServer(private val ctx: Context) {
     private var serverSocket: ServerSocket? = null
     @Volatile
     private var petOut: java.io.OutputStream? = null
+    private var petSock: java.net.Socket? = null
     private var walkSeq = 0
     private var walkSide = false
     private var saySeq = 0
@@ -124,6 +125,9 @@ class AssetServer(private val ctx: Context) {
             synchronized(out) { sendText(out, json) }
         } catch (_: Exception) {
             petOut = null
+            // 关键：必须把连接关掉，网页端的 onclose 才会触发自动重连；
+            // 只置空 petOut 会让双方都以为还连着 → 永久静默
+            try { petSock?.close() } catch (_: Exception) {}
         }
     }
 
@@ -157,6 +161,9 @@ class AssetServer(private val ctx: Context) {
             synchronized(out) { sendText(out, json) }
         } catch (_: Exception) {
             petOut = null
+            // 关键：必须把连接关掉，网页端的 onclose 才会触发自动重连；
+            // 只置空 petOut 会让双方都以为还连着 → 永久静默
+            try { petSock?.close() } catch (_: Exception) {}
         }
     }
     var port: Int = 0
@@ -345,6 +352,7 @@ class AssetServer(private val ctx: Context) {
         if (query.contains("role=pet")) {
             log("准备给桌宠发 init")
             petOut = out
+            petSock = sock
             log("桌宠 socket 连上了 ($query)")
             val skin = prefs.getString("skin", null)
             val theme = prefs.getString("prefs", null)
