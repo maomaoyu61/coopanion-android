@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v1.9 ===")
+        s.log("=== PetService 启动 v3.4 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -754,6 +754,7 @@ class PetService : Service() {
 
     private fun applyDshState(st: String, text: String) {
         if (st == dshState && text == dshStatus) return
+        server?.log("DSH 状态 -> " + st + " | " + text)
         dshState = st
         dshStatus = text
         when (st) {
@@ -845,6 +846,7 @@ class PetService : Service() {
         if (app == lastNotifyApp && now - lastNotifyAt < 60000) return
         lastNotifyApp = app
         lastNotifyAt = now
+        server?.log("收到 " + app + " 通知")
         handler.post { say(app + "有新消息啦～") }
     }
 
@@ -855,6 +857,7 @@ class PetService : Service() {
 
     /** 重载桌宠网页（切换形象/配色后调用，网页会带着新配置重连）。 */
     fun reloadPet() {
+        server?.log("重载桌宠网页（换形象/配色）")
         handler.post {
             try { web_?.reload() } catch (_: Exception) {}
         }
@@ -866,6 +869,7 @@ class PetService : Service() {
 
     private fun speakAloud(text: String) {
         if (text.isBlank()) return
+        server?.log("朗读走 " + (if (ttsReady) "系统TTS" else "网页TTS"))
         val p = getSharedPreferences("pet", Context.MODE_PRIVATE)
         val rate = p.getFloat("tts_rate", 1f)
         val pitch = p.getFloat("tts_pitch", 1f)
