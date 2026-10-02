@@ -144,6 +144,13 @@ class PetService : Service() {
             }
 
             override fun onPetHello() {
+                // 每次她上线都把保存的外观设置同步过去（否则启动前拖的滑块不会有反应）
+                server?.log("同步外观设置")
+                server?.sendPrefs(
+                    scale = getSharedPreferences("pet", Context.MODE_PRIVATE)
+                        .getFloat("scale", 1f).toDouble(),
+                    sound = getSharedPreferences("pet", Context.MODE_PRIVATE)
+                        .getBoolean("sound", true))
                 if (greeted) return
                 greeted = true
                 handler.postDelayed({
