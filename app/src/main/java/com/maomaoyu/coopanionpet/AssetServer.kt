@@ -38,6 +38,24 @@ class AssetServer(private val ctx: Context) {
         }
     }
 
+    /** 给桌宠发外观/音效设置（网页支持 scale 与 sound）。 */
+    fun sendPrefs(scale: Double? = null, sound: Boolean? = null) {
+        val sb = StringBuilder("{\"t\":\"prefs\"")
+        if (scale != null) sb.append(",\"scale\":").append(scale)
+        if (sound != null) sb.append(",\"sound\":").append(sound)
+        sb.append("}")
+        log("发设置 -> " + sb)
+        sendJson(sb.toString())
+    }
+
+    private fun sendJson(json: String) {
+        val o = petOut ?: return
+        try {
+            sendFrame(o, 0x1, json.toByteArray(Charsets.UTF_8))
+        } catch (_: Exception) {
+        }
+    }
+
     private fun logText(): String = synchronized(logs) { logs.joinToString("\n") }
 
     /** 桌宠发来的事件（打字、摸它、上线…）交给上层处理。 */

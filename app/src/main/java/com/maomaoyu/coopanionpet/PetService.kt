@@ -92,9 +92,21 @@ class PetService : Service() {
         }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+            server?.log("TTS status=" + status)
             server?.log("TTS 初始化 status=" + status + " (0=SUCCESS)")
             if (ttsReady) {
-                try { tts?.language = Locale.CHINESE } catch (_: Exception) {}
+                try {
+                    val lang = tts?.setLanguage(Locale.CHINA)
+                    server?.log("TTS setLanguage=" + lang)
+                    if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        ttsReady = false
+                        server?.log("TTS 缺少中文数据")
+                    } else {
+                        ttsReady = true
+                    }
+                } catch (e: Exception) {
+                    server?.log("TTS 语言设置异常: " + e.message)
+                }
             }
         }
         val s = AssetServer(this)
@@ -202,6 +214,7 @@ class PetService : Service() {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT))
         }
+        if (passthrough) params.flags = params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         try {
             wm.addView(box, params)
             root_ = box
@@ -566,6 +579,16 @@ class PetService : Service() {
         handler.postDelayed(hideBubble, 9000)
     }
 
+    /** 设置桌宠大小（0.6–1.5）。 */
+    fun applyScale(s: Double) {
+        server?.sendPrefs(scale = s)
+    }
+
+    /** 开关音效。 */
+    fun applySound(on: Boolean) {
+        server?.sendPrefs(sound = on)
+    }
+
     /** 原生输入条提交的一句话。 */
     fun submitText(text: String) {
         handleUserText(text)
@@ -759,13 +782,9 @@ class PetService : Service() {
             v.alpha = 0.95f
             return
         }
-        v.background = GradientDrawable().apply {
-            cornerRadius = dm.density * 15
-            setColor(0xFFFFFFFF.toInt())
-            setStroke((dm.density * 1.8f).toInt(),
-                if (gray) 0xFFC7CEDA.toInt() else 0xFFBFD2F7.toInt())
-        }
-        v.text = if (gray) "用" else "摸"
+        v.background = resources.getDrawable(
+            if (gray) R.drawable.btn_use else R.drawable.btn_pet, null)
+        v.text = ""
         v.alpha = 1f
     }
 

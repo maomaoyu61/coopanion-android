@@ -16,6 +16,8 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.CheckBox
+import android.widget.SeekBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -126,7 +128,46 @@ class MainActivity : Activity() {
         })
 
         // ── 使用说明 ──
-        col.addView(section("③ 怎么玩"))
+        // ── 外观 ──
+        col.addView(section("③ 外观"))
+        val scaleLabel = TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFF6B74A8.toInt())
+        }
+        val seek = SeekBar(this).apply {
+            max = 9
+            progress = (((prefs.getFloat("scale", 1f) - 0.6f) * 10f).toInt()).coerceIn(0, 9)
+            setPadding(0, (d * 4).toInt(), 0, 0)
+        }
+        scaleLabel.text = "桌宠大小：" + String.format("%.1f", 0.6f + seek.progress / 10f) + "×"
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
+                val v = 0.6f + value / 10f
+                scaleLabel.text = "桌宠大小：" + String.format("%.1f", v) + "×"
+                prefs.edit().putFloat("scale", v).apply()
+                PetService.instance?.applyScale(v.toDouble())
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        val soundBox = CheckBox(this).apply {
+            text = "音效（她走动/说话的音效）"
+            textSize = 14f
+            isChecked = prefs.getBoolean("sound", true)
+            setTextColor(0xFF2A3876.toInt())
+            setPadding(0, (d * 8).toInt(), 0, 0)
+        }
+        soundBox.setOnCheckedChangeListener { _, checked ->
+            prefs.edit().putBoolean("sound", checked).apply()
+            PetService.instance?.applySound(checked)
+        }
+        col.addView(card().apply {
+            addView(scaleLabel)
+            addView(seek)
+            addView(soundBox)
+        })
+
+        col.addView(section("④ 怎么玩"))
         col.addView(card().apply {
             addView(hint(
                 "• 悬浮钮：点「摸」= 跟她玩；点「用」= 触摸穿透，正常操作手机\n" +
