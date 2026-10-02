@@ -790,10 +790,8 @@ class PetService : Service() {
         v.text = ""
         v.textSize = 13f
         v.alpha = 0.75f
-        v.background = GradientDrawable().apply {
-            cornerRadius = dm.density * 7
-            setColor(0xB32C7BE5.toInt())
-        }
+        v.background = resources.getDrawable(
+            if (passthrough) R.drawable.btn_collapsed_use else R.drawable.btn_collapsed_pet, null)
         try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
         syncMic()
         saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
