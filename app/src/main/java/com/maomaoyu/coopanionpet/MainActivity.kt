@@ -60,20 +60,20 @@ class MainActivity : Activity() {
         // ── 权限与启动 ──
         col.addView(section("① 权限与启动"))
         col.addView(card().apply {
-            addView(pill("\uD83D\uDCE6  授予悬浮窗权限", 0xFF2C7BE5.toInt()) {
+            addView(pill("\uD83D\uDCE6  授予悬浮窗权限", false) {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:$packageName")))
             })
-            addView(pill("\u25B6  启动桌宠", 0xFF1FA463.toInt()) {
+            addView(pill("\u25B6  启动桌宠", true) {
                 startForegroundService(Intent(this@MainActivity, PetService::class.java))
             })
-            addView(pill("\u25A0  停止桌宠", 0xFF8A8F99.toInt()) {
+            addView(pill("\u25A0  停止桌宠", false) {
                 stopService(Intent(this@MainActivity, PetService::class.java))
             })
-            addView(pill("\uD83D\uDC57  装扮（换形象 / 配色）", 0xFF8E44AD.toInt()) {
+            addView(pill("\uD83D\uDC57  装扮（换形象 / 配色）", false) {
                 startActivity(Intent(this@MainActivity, DressActivity::class.java))
             })
-            addView(pill("\uD83D\uDD14  通知权限设置", 0xFF6C757D.toInt()) {
+            addView(pill("\uD83D\uDD14  通知权限设置", false) {
                 val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 i.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
                 startActivity(i)
@@ -87,7 +87,7 @@ class MainActivity : Activity() {
         val eModel = field(col, "模型名（留空 = deepseek-chat）", "api_model", Brain.DEFAULT_MODEL)
 
         col.addView(card().apply {
-            addView(pill("\uD83D\uDCBE  保存并重启桌宠", 0xFF2C7BE5.toInt()) {
+            addView(pill("\uD83D\uDCBE  保存并重启桌宠", true) {
                 var base = eBase.text.toString().trim()
                 var key = eKey.text.toString().trim()
                 if (key.isEmpty() && base.startsWith("sk-")) {
@@ -103,7 +103,7 @@ class MainActivity : Activity() {
                 startForegroundService(Intent(this@MainActivity, PetService::class.java))
                 toast("已保存，桌宠重启中…")
             })
-            addView(pill("\uD83E\uDDF9  清空聊天记忆", 0xFF8A8F99.toInt()) {
+            addView(pill("\uD83E\uDDF9  清空聊天记忆", false) {
                 Brain(this@MainActivity).clearMemory()
                 toast("记忆已清空")
             })
