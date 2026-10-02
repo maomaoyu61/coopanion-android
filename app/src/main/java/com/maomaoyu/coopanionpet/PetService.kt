@@ -486,7 +486,7 @@ class PetService : Service() {
                 setColor(0xCC8E44AD.toInt())
             }
             alpha = 0.9f
-            val slop2 = ViewConfiguration.get(this).scaledTouchSlop
+            val slop2 = ViewConfiguration.get(this@PetService).scaledTouchSlop
             var mdX = 0f; var mdY = 0f; var moved2 = false
             setOnTouchListener { v2, ev2 ->
                 val tp = btnParams_
