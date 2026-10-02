@@ -92,13 +92,22 @@ class MainActivity : Activity() {
         }
 
         label("聊天设置（默认 DeepSeek，任何 OpenAI 兼容接口都行）")
+        label("① 接口地址（留空 = 用 DeepSeek）")
         val eBase = edit("api_base", Brain.DEFAULT_BASE)
-        val eKey = edit("api_key", "sk-...（只存在手机本地，不会上传）", true)
+        label("② API Key（sk- 开头，只存在手机本地）")
+        val eKey = edit("api_key", "sk-...", true)
+        label("③ 模型名（留空 = deepseek-chat）")
         val eModel = edit("api_model", Brain.DEFAULT_MODEL)
         button("保存设置并重启桌宠") {
+            var base = eBase.text.toString().trim()
+            var key = eKey.text.toString().trim()
+            if (key.isEmpty() && base.startsWith("sk-")) {
+                key = base; base = ""
+                Toast.makeText(this, "检测到 Key 填在了地址栏，已自动纠正", Toast.LENGTH_LONG).show()
+            }
             prefs.edit()
-                .putString("api_base", eBase.text.toString().trim())
-                .putString("api_key", eKey.text.toString().trim())
+                .putString("api_base", base)
+                .putString("api_key", key)
                 .putString("api_model", eModel.text.toString().trim())
                 .apply()
             stopService(Intent(this, PetService::class.java))

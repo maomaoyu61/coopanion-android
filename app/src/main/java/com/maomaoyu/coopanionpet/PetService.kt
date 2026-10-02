@@ -65,6 +65,8 @@ class PetService : Service() {
     private val brain by lazy { Brain(this) }
     private var voice: android.speech.SpeechRecognizer? = null
     private val longPress = Runnable { startVoice() }
+    private var bubble_: TextView? = null
+    private var bubbleParams_: WindowManager.LayoutParams? = null
     private var btnCollapsed = false
     private var btnSide = 1   // 0=左 1=右
     private var btnDownX = 0f
@@ -91,7 +93,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v1.5 ===")
+        s.log("=== PetService 启动 v1.8 ===")
         s.start()
         server = s
         lastPort = s.port
@@ -321,6 +323,52 @@ class PetService : Service() {
         }
     }
 
+    /** 原生气泡：回复直接画在屏幕上（网页那套气泡在安卓上不可靠）。 */
+    private fun addNativeBubble(wm: WindowManager, dm: android.util.DisplayMetrics) {
+        val v = TextView(this).apply {
+            textSize = 15f
+            setTextColor(0xFFFFFFFF.toInt())
+            setPadding((dm.density * 14).toInt(), (dm.density * 10).toInt(),
+                (dm.density * 14).toInt(), (dm.density * 10).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = dm.density * 16
+                setColor(0xF01F2430.toInt())
+            }
+            visibility = android.view.View.GONE
+            maxLines = 6
+        }
+        val p = WindowManager.LayoutParams(
+            (dm.widthPixels * 0.78f).toInt(),
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (dm.widthPixels * 0.11f).toInt()
+            y = (dm.heightPixels * 0.52f).toInt()
+        }
+        try { wm.addView(v, p) } catch (_: Exception) {}
+        bubble_ = v
+        bubbleParams_ = p
+    }
+
+    private val hideBubble = Runnable { bubble_?.visibility = android.view.View.GONE }
+
+    private fun showBubble(text: String) {
+        val wm = wm_ ?: return
+        val v = bubble_ ?: return
+        val p = bubbleParams_ ?: return
+        v.text = text
+        v.visibility = android.view.View.VISIBLE
+        try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+        raiseButtons()
+        handler.removeCallbacks(hideBubble)
+        handler.postDelayed(hideBubble, 8000)
+    }
+
     /** 原生输入条提交的一句话。 */
     fun submitText(text: String) {
         handleUserText(text)
@@ -362,6 +410,7 @@ class PetService : Service() {
     private fun say(text: String, actions: List<String> = emptyList()) {
         server?.log("说 -> " + text.take(80) + " (ttsReady=" + ttsReady + ")")
         server?.sendSay(text, actions)
+        showBubble(text)
         if (ttsReady && text.isNotBlank()) {
             try {
                 tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "pet")
@@ -704,6 +753,8 @@ class PetService : Service() {
         tts = null
         try { voice?.destroy() } catch (_: Exception) {}
         voice = null
+        try { bubble_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
+        bubble_ = null
         try { chat_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         chat_ = null
         try { mic_?.let { wm_?.removeView(it) } } catch (_: Exception) {}

@@ -28,7 +28,13 @@ class Brain(private val ctx: Context) {
 
     /** 同步调用，必须在后台线程上跑。返回 null 表示没拿到内容。 */
     fun ask(userText: String): String? {
-        val key = prefs.getString("api_key", "").orEmpty().trim()
+        var key = prefs.getString("api_key", "").orEmpty().trim()
+        var rawBase = prefs.getString("api_base", "").orEmpty().trim()
+        // 用户可能把 Key 填到了"接口地址"栏（设置页以前没标签）→ 自动纠正
+        if (key.isEmpty() && rawBase.startsWith("sk-")) {
+            key = rawBase
+            rawBase = ""
+        }
         if (key.isEmpty()) {
             return "我还没有 API Key 呢 —— 打开 App 填一个，我就能陪你聊天啦。"
         }
