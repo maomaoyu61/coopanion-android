@@ -208,6 +208,7 @@ class PetService : Service() {
             stopSelf()
             return
         }
+        addNativeBubble(wm, dm)
         addToggleButton(wm)
     }
 
