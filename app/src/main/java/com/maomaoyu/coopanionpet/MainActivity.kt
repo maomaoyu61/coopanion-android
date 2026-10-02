@@ -46,6 +46,18 @@ class MainActivity : Activity() {
             stopService(Intent(this, PetService::class.java))
         })
 
+        col.addView(TextView(this).apply {
+            textSize = 14f
+            text = "桌宠大小（改完会自动重启桌宠生效）"
+        })
+        for ((i, label) in listOf("小", "中", "大").withIndex()) {
+            col.addView(button("大小：$label") {
+                getSharedPreferences("pet", MODE_PRIVATE).edit().putInt("size", i).apply()
+                stopService(Intent(this, PetService::class.java))
+                startForegroundService(Intent(this, PetService::class.java))
+            })
+        }
+
         col.addView(button("装扮（应用内）") {
             startActivity(Intent(this, DressActivity::class.java))
         })

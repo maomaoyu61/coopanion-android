@@ -24,12 +24,13 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * 桌宠本体：**只有桌宠大小**的透明置顶窗口，可以在**整个屏幕**上自己跑动，
- * 也可以被手指拖到任何地方。
+ * 桌宠本体。
  *
- * 走动是"移动窗口本身"实现的（和移植版 deepfish-desktop-pet-android 同一思路），
- * 同时通过 WebSocket 给桌宠发 walk 消息，让它播放走路动画。
- * 网页内部的漫游被关掉（roam:"off"），否则它会在小窗口里撞墙。
+ * - 窗口**就是桌宠大小**（三档可调），透明置顶，可在整个屏幕上自己溜达、也能手拖。
+ * - 走动 = 移动窗口本身（移植版同思路），同时给桌宠发左右交替的 walk 消息让它播走路动画。
+ * - 网页内部漫游关掉（roam:"off"），否则它会在小窗口里撞墙。
+ * - **轻点桌宠时窗口向上临时撑开**（底边不动，所以桌宠位置不变），
+ *   这样长按菜单/气泡才有地方显示、不会被窗口裁掉。
  */
 class PetService : Service() {
 
@@ -47,10 +48,12 @@ class PetService : Service() {
     private var moving = false
     private var tick = 0
     private var userDragging = false
+    private var expanded = false
     private var petW = 0
     private var petH = 0
     private var screenW = 0
     private var screenH = 0
+    private var density = 1f
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -71,14 +74,24 @@ class PetService : Service() {
         handler.postDelayed(roamTick, 2500)
     }
 
+    private fun sizeOf(index: Int): Pair<Int, Int> = when (index) {
+        0 -> (100 * density).toInt() to (170 * density).toInt()
+        2 -> (150 * density).toInt() to (260 * density).toInt()
+        else -> (120 * density).toInt() to (205 * density).toInt()
+    }
+
     private fun attachPet(port: Int) {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         wm_ = wm
         val dm = resources.displayMetrics
+        density = dm.density
         screenW = dm.widthPixels
         screenH = dm.heightPixels
-        petW = (dm.density * 150).toInt()
-        petH = (dm.density * 260).toInt()
+
+        val idx = getSharedPreferences("pet", Context.MODE_PRIVATE).getInt("size", 1)
+        val (w, h) = sizeOf(idx)
+        petW = w
+        petH = h
 
         val params = WindowManager.LayoutParams(
             petW, petH,
@@ -89,7 +102,7 @@ class PetService : Service() {
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             x = (screenW - petW) / 2
-            y = screenH - petH - (dm.density * 40).toInt()
+            y = screenH - petH - (dm.density * 48).toInt()
         }
         params_ = params
         curX = params.x.toFloat()
@@ -97,7 +110,7 @@ class PetService : Service() {
 
         val web = WebView(this).apply {
             setBackgroundColor(0x00000000)
-            alpha = 0f   // 先隐藏：等肤色从 socket 应用回来再显示，避免"先旧后新"的跳变
+            alpha = 0f
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -115,18 +128,21 @@ class PetService : Service() {
         web.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
         web_ = web
 
-        val container = PetContainer(this, wm, params) { dragging ->
+        val container = PetContainer(this, wm, params, { dragging ->
             userDragging = dragging
             if (!dragging) {
-                // 拖完就把它现在的位置当作新的漫游起点
-                params_.let { p ->
-                    curX = p!!.x.toFloat()
+                collapseMenuRoom()
+                val p = params_
+                if (p != null) {
+                    curX = p.x.toFloat()
                     curY = p.y.toFloat()
                 }
                 handler.removeCallbacks(roamTick)
                 handler.postDelayed(roamTick, 2500)
             }
-        }
+        }, {
+            expandForMenu()   // 轻点：撑开上方空间，菜单才不会被裁
+        })
         container.setBackgroundColor(0x00000000)
         container.addView(web, FrameLayout.LayoutParams(
             FrameLayout.LayoutParams.MATCH_PARENT,
@@ -148,16 +164,47 @@ class PetService : Service() {
         }, 900)
     }
 
-    /* ---------------- 全屏漫游 ---------------- */
+    /* ---------- 轻点：临时向上撑开，给菜单/气泡留位置 ---------- */
+
+    private fun expandForMenu() {
+        val p = params_ ?: return
+        val extra = (density * 300).toInt()
+        if (!expanded) {
+            expanded = true
+            p.height = petH + extra
+            p.y = curY.toInt() - extra          // 底边不动 → 桌宠位置不变
+        }
+        try {
+            wm_?.updateViewLayout(box_, p)
+        } catch (_: Exception) {
+        }
+        handler.removeCallbacks(collapseRunnable)
+        handler.postDelayed(collapseRunnable, 9000)
+    }
+
+    private val collapseRunnable = Runnable { collapseMenuRoom() }
+
+    private fun collapseMenuRoom() {
+        val p = params_ ?: return
+        if (!expanded) return
+        expanded = false
+        p.height = petH
+        p.y = curY.toInt()
+        try {
+            wm_?.updateViewLayout(box_, p)
+        } catch (_: Exception) {
+        }
+    }
+
+    /* ---------- 全屏漫游 ---------- */
 
     private val roamTick = object : Runnable {
         override fun run() {
-            if (userDragging) {
+            if (userDragging || expanded) {
                 handler.postDelayed(this, 500)
                 return
             }
             if (!moving) {
-                // 挑一个新目标：整个屏幕范围内
                 targetX = Random.nextFloat() * (screenW - petW).coerceAtLeast(1)
                 targetY = Random.nextFloat() * (screenH - petH).coerceAtLeast(1)
                 moving = true
@@ -184,8 +231,8 @@ class PetService : Service() {
                 } catch (_: Exception) {
                 }
             }
-            // 每 ~0.6 秒补发一次走路消息，动画就不会断
-            if (tick++ % 18 == 0) server?.petWalk(false)
+            // 约每 0.55 秒补一条 walk（左右交替），走路动画就不断
+            if (tick++ % 16 == 0) server?.petWalk(false)
             handler.postDelayed(this, 33)
         }
     }
@@ -210,7 +257,7 @@ class PetService : Service() {
         }
         return builder
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("桌宠在跑（能拖动，也会自己溜达）")
+            .setContentText("桌宠在跑（可拖动、会溜达；轻点它可展开菜单）")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(open)
             .setOngoing(true)

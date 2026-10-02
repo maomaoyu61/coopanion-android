@@ -23,12 +23,15 @@ class AssetServer(private val ctx: Context) {
     @Volatile
     private var petOut: java.io.OutputStream? = null
     private var walkSeq = 0
+    private var walkSide = false
 
     /** 让桌宠播放"走路"动画（窗口移动由 PetService 负责）。 */
     fun petWalk(run: Boolean = false) {
         val out = petOut ?: return
         walkSeq++
-        val json = "{\"t\":\"walk\",\"id\":\"w$walkSeq\",\"to\":0.5,\"run\":$run}"
+        walkSide = !walkSide
+        val to = if (walkSide) 0.12 else 0.88
+        val json = "{\"t\":\"walk\",\"id\":\"w$walkSeq\",\"to\":$to,\"run\":$run}"
         try {
             synchronized(out) { sendText(out, json) }
         } catch (_: Exception) {

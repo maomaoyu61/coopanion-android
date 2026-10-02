@@ -21,7 +21,8 @@ class PetContainer(
     context: Context,
     private val wm: WindowManager,
     private val params: WindowManager.LayoutParams,
-    private val onDragChanged: ((Boolean) -> Unit)? = null
+    private val onDragChanged: ((Boolean) -> Unit)? = null,
+    private val onTap: (() -> Unit)? = null
 ) : FrameLayout(context) {
 
     private var downRawX = 0f
@@ -67,7 +68,7 @@ class PetContainer(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val was = dragging
-                if (was) onDragChanged?.invoke(false)
+                if (was) onDragChanged?.invoke(false) else onTap?.invoke()
                 dragging = false
                 if (was) {
                     try {
