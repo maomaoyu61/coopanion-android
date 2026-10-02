@@ -9,14 +9,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
+import android.widget.TextView
+import kotlin.math.abs
 
 /**
  * 桌宠本体 —— 全屏透明窗口，不设任何"框"。
@@ -39,7 +44,14 @@ class PetService : Service() {
     private var server: AssetServer? = null
     private var wm_: WindowManager? = null
     private var params_: WindowManager.LayoutParams? = null
-    private var passthrough = false
+    private var passthrough = true
+    private var btn_: TextView? = null
+    private var btnParams_: WindowManager.LayoutParams? = null
+    private var btnMoved = false
+    private var btnDownX = 0f
+    private var btnDownY = 0f
+    private var btnStartX = 0
+    private var btnStartY = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -115,7 +127,76 @@ class PetService : Service() {
             root_ = box
         } catch (e: Exception) {
             stopSelf()
+            return
         }
+        addToggleButton(wm)
+    }
+
+    /** 悬浮小按钮：点一下在「操作手机」和「摸桌宠」之间切换；可拖到任意位置。 */
+    private fun addToggleButton(wm: WindowManager) {
+        val prefs = getSharedPreferences("pet", Context.MODE_PRIVATE)
+        val size = (density * 46).toInt()
+        val p = WindowManager.LayoutParams(
+            size, size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = prefs.getInt("btn_x", screenW - size - (density * 10).toInt())
+            y = prefs.getInt("btn_y", (screenH * 0.6f).toInt())
+        }
+        val slop = ViewConfiguration.get(this).scaledTouchSlop
+        val tv = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 20f
+            setTextColor(0xFFFFFFFF.toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(if (passthrough) 0xCC666666.toInt() else 0xCC1FA463.toInt())
+            }
+            text = if (passthrough) "🖐" else "🐾"
+        }
+        tv.setOnTouchListener { v, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    btnDownX = ev.rawX; btnDownY = ev.rawY
+                    btnStartX = p.x; btnStartY = p.y; btnMoved = false
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(ev.rawX - btnDownX) > slop || abs(ev.rawY - btnDownY) > slop) btnMoved = true
+                    if (btnMoved) {
+                        p.x = btnStartX + (ev.rawX - btnDownX).toInt()
+                        p.y = btnStartY + (ev.rawY - btnDownY).toInt()
+                        try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (btnMoved) {
+                        prefs.edit().putInt("btn_x", p.x).putInt("btn_y", p.y).apply()
+                    } else {
+                        togglePassthrough()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+        try { wm.addView(tv, p) } catch (_: Exception) {}
+        btn_ = tv
+        btnParams_ = p
+    }
+
+    /** 把按钮提到最上层（主窗口变可点后可能压住它）。 */
+    private fun bringButtonToFront() {
+        val wm = wm_ ?: return
+        val v = btn_ ?: return
+        val p = btnParams_ ?: return
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try { wm.addView(v, p) } catch (_: Exception) {}
     }
 
     private var root_: FrameLayout? = null
@@ -133,6 +214,12 @@ class PetService : Service() {
             wm_?.updateViewLayout(root_, p)
         } catch (_: Exception) {
         }
+        btn_?.let { b ->
+            b.text = if (passthrough) "🖐" else "🐾"
+            (b.background as? GradientDrawable)?.setColor(
+                if (passthrough) 0xCC666666.toInt() else 0xCC1FA463.toInt())
+        }
+        bringButtonToFront()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_ID, buildNotification())
         return passthrough
@@ -182,6 +269,8 @@ class PetService : Service() {
             root_?.let { wm_?.removeView(it) }
         } catch (_: Exception) {
         }
+        try { btn_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
+        btn_ = null
         web_?.destroy()
         web_ = null
         root_ = null
