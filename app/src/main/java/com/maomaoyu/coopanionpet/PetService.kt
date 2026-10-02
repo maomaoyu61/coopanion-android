@@ -664,7 +664,7 @@ class PetService : Service() {
             } catch (_: Exception) {
             }
         }
-        val esc = text.replace("\\", "\\\\").replace(", \").replace("\n", " ")
+        val esc = text.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ")
         val js = "(function(){try{var u=new SpeechSynthesisUtterance('" + esc + "');" +
             "u.lang='zh-CN';u.rate=" + rate + ";u.pitch=" + pitch + ";" +
             "window.speechSynthesis.cancel();window.speechSynthesis.speak(u);}catch(e){}})()"
