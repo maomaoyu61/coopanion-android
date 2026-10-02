@@ -73,14 +73,6 @@ class MainActivity : Activity() {
                 })
             })
         })
-            addView(TextView(this@MainActivity).apply {
-                text = "安卓外壳 · 形象/动作/配色都来自上游 Coopanion"
-                textSize = 12f
-                setTextColor(0xFF9FB3D9.toInt())
-                setPadding(0, (d * 6).toInt(), 0, 0)
-            })
-        })
-
         // ── 权限与启动 ──
         col.addView(section("① 权限与启动"))
         col.addView(card().apply {
