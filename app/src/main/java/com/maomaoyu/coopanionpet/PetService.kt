@@ -47,7 +47,7 @@ class PetService : Service() {
 
     private fun attachOverlay(port: Int) {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val height = (resources.displayMetrics.density * 300).toInt()
+        val height = (resources.displayMetrics.density * 200).toInt()
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             height,
@@ -66,7 +66,7 @@ class PetService : Service() {
             settings.allowContentAccess = true
             webViewClient = WebViewClient()
         }
-        view.loadUrl("http://127.0.0.1:$port/web/pet.html")
+        view.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
         try {
             wm.addView(view, params)
             web = view
