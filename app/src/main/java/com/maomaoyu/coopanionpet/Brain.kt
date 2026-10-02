@@ -26,6 +26,9 @@ class Brain(private val ctx: Context) {
         JSONArray()
     }
 
+    /** 日志回调（往 App 的 /log 里写），便于从容器侧排错。 */
+    var logCb: ((String) -> Unit)? = null
+
     /** 同步调用，必须在后台线程上跑。返回 null 表示没拿到内容。 */
     fun ask(userText: String): String? {
         var key = prefs.getString("api_key", "").orEmpty().trim()
@@ -56,6 +59,7 @@ class Brain(private val ctx: Context) {
             put("max_tokens", 320)
         }
 
+        logCb?.invoke("brain: base=$base model=$model key=" + key.take(6) + "… (原始地址栏=" + base0.ifEmpty { "空" } + ")")
         var conn: HttpURLConnection? = null
         return try {
             conn = (URL("$base/chat/completions").openConnection() as HttpURLConnection).apply {

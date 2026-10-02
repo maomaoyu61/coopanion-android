@@ -65,6 +65,9 @@ class PetService : Service() {
     private val brain by lazy { Brain(this) }
     private var voice: android.speech.SpeechRecognizer? = null
     private val longPress = Runnable { startVoice() }
+    private var input_: android.widget.LinearLayout? = null
+    private var inputParams_: WindowManager.LayoutParams? = null
+    private var inputEdit_: android.widget.EditText? = null
     private var bubble_: TextView? = null
     private var bubbleParams_: WindowManager.LayoutParams? = null
     private var btnCollapsed = false
@@ -93,7 +96,8 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v1.8 ===")
+        s.log("=== PetService 启动 v1.9 ===")
+        brain.logCb = { line -> s.log(line) }
         s.start()
         server = s
         lastPort = s.port
@@ -323,6 +327,96 @@ class PetService : Service() {
         }
     }
 
+    /** 悬浮输入条：不再用 Activity，所以不会跳转到 App。 */
+    private fun showChatInput() {
+        val wm = wm_ ?: return
+        val dm = resources.displayMetrics
+        if (input_ == null) {
+            val bar = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.HORIZONTAL
+                setBackgroundColor(0xFFF2F3F5.toInt())
+                setPadding((dm.density * 12).toInt(), (dm.density * 8).toInt(),
+                    (dm.density * 12).toInt(), (dm.density * 8).toInt())
+            }
+            val et = android.widget.EditText(this).apply {
+                hint = "跟大肥鱼说点什么…"
+                textSize = 15f
+                setTextColor(0xFF111111.toInt())
+                setHintTextColor(0xFF888888.toInt())
+                setSingleLine(true)
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+            }
+            val btn = Button(this).apply { text = "发送" }
+            bar.addView(et, android.widget.LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            bar.addView(btn)
+            val p = WindowManager.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.START
+                softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            }
+            val send = {
+                val txt = et.text.toString().trim()
+                if (txt.isNotEmpty()) handleUserText(txt)
+                et.setText("")
+                hideChatInput()
+            }
+            btn.setOnClickListener { send() }
+            et.setOnEditorActionListener { _, id, _ ->
+                if (id == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) {
+                    send(); true
+                } else false
+            }
+            if (Build.VERSION.SDK_INT >= 30) {
+                bar.setOnApplyWindowInsetsListener { view, insets ->
+                    val ime = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom
+                    p.y = ime
+                    try { wm.updateViewLayout(view, p) } catch (_: Exception) {}
+                    insets
+                }
+            }
+            input_ = bar
+            inputParams_ = p
+            inputEdit_ = et
+        }
+        val v = input_ ?: return
+        val p = inputParams_ ?: return
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try { wm.addView(v, p) } catch (_: Exception) {}
+        raiseButtons()
+        val et = inputEdit_
+        if (et != null) {
+            et.requestFocus()
+            handler.postDelayed({
+                try {
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE)
+                        as android.view.inputmethod.InputMethodManager
+                    imm.showSoftInput(et, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                } catch (_: Exception) {
+                }
+            }, 250)
+        }
+        say("我在这儿呢，你说～")
+    }
+
+    private fun hideChatInput() {
+        val wm = wm_ ?: return
+        val v = input_ ?: return
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE)
+                as android.view.inputmethod.InputMethodManager
+            imm.hideSoftInputFromWindow(v.windowToken, 0)
+        } catch (_: Exception) {
+        }
+    }
+
     /** 原生气泡：回复直接画在屏幕上（网页那套气泡在安卓上不可靠）。 */
     private fun addNativeBubble(wm: WindowManager, dm: android.util.DisplayMetrics) {
         val v = TextView(this).apply {
@@ -361,12 +455,15 @@ class PetService : Service() {
         val wm = wm_ ?: return
         val v = bubble_ ?: return
         val p = bubbleParams_ ?: return
+        server?.log("显示原生气泡: " + text.take(40))
         v.text = text
         v.visibility = android.view.View.VISIBLE
-        try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+        // 有些 ROM 对 GONE→VISIBLE 的悬浮窗不刷新，直接重加最稳
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try { wm.addView(v, p) } catch (_: Exception) {}
         raiseButtons()
         handler.removeCallbacks(hideBubble)
-        handler.postDelayed(hideBubble, 8000)
+        handler.postDelayed(hideBubble, 9000)
     }
 
     /** 原生输入条提交的一句话。 */
@@ -558,11 +655,7 @@ class PetService : Service() {
                         MotionEvent.ACTION_UP -> {
                             if (!moved2) {
                                 server?.log("点了 💬 聊天输入")
-                                try {
-                                    startActivity(Intent(this@PetService, ChatInputActivity::class.java)
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                } catch (_: Exception) {
-                                }
+                                showChatInput()
                             } else {
                                 saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
                             }
@@ -597,22 +690,28 @@ class PetService : Service() {
     /** 让 🎤 跟着圆按钮走（收起时一起隐藏）。 */
     private fun syncMic() {
         val wm = wm_ ?: return
-        val mv = mic_ ?: return
-        val mp = micParams_ ?: return
         val p = btnParams_ ?: return
         val dm = resources.displayMetrics
-        val size = mp.width
-        mp.x = p.x + (p.width - size) / 2
-        mp.y = (p.y - size - (dm.density * 8).toInt()).coerceAtLeast(0)
-        mv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
-        try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
-
-        val cv = chat_ ?: return
-        val cp = chatParams_ ?: return
-        cp.x = p.x + (p.width - cp.width) / 2
-        cp.y = (mp.y - cp.height - (dm.density * 8).toInt()).coerceAtLeast(0)
-        cv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
-        try { wm.updateViewLayout(cv, cp) } catch (_: Exception) {}
+        var topY = p.y
+        // 🎤 已在 v1.6 移除（系统识别在你手机上必失败），这里不能再因为它为空就 return
+        val mv = mic_
+        val mp = micParams_
+        if (mv != null && mp != null) {
+            val size = mp.width
+            mp.x = p.x + (p.width - size) / 2
+            mp.y = (p.y - size - (dm.density * 8).toInt()).coerceAtLeast(0)
+            mv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
+            topY = mp.y
+            try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
+        }
+        val cv = chat_
+        val cp = chatParams_
+        if (cv != null && cp != null) {
+            cp.x = p.x + (p.width - cp.width) / 2
+            cp.y = (topY - cp.height - (dm.density * 8).toInt()).coerceAtLeast(0)
+            cv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
+            try { wm.updateViewLayout(cv, cp) } catch (_: Exception) {}
+        }
     }
 
     private fun paintButton(v: TextView, gray: Boolean) {
@@ -753,6 +852,8 @@ class PetService : Service() {
         tts = null
         try { voice?.destroy() } catch (_: Exception) {}
         voice = null
+        try { input_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
+        input_ = null
         try { bubble_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         bubble_ = null
         try { chat_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
