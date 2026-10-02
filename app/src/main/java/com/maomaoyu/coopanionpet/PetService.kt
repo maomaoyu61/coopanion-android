@@ -55,6 +55,7 @@ class PetService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var tts: TextToSpeech? = null
     private var ttsReady = false
+    private var ttsWarned = false
     private val brain by lazy { Brain(this) }
     private var voice: android.speech.SpeechRecognizer? = null
     private val longPress = Runnable { startVoice() }
@@ -149,7 +150,9 @@ class PetService : Service() {
         }
         params_ = params
 
-        val web = WebView(this).apply {
+        val web = PetWebView(this) { want ->
+            setWindowFocusable(want)
+        }.apply {
             setBackgroundColor(0x00000000)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -264,6 +267,21 @@ class PetService : Service() {
         if (prefs.getBoolean("btn_collapsed", false)) collapseButton()
     }
 
+    /** 页面要输入时临时让窗口可聚焦（键盘才能弹出来），输入结束再变回不抢焦点。 */
+    private fun setWindowFocusable(want: Boolean) {
+        val p = params_ ?: return
+        p.flags = if (want) {
+            p.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        } else {
+            p.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        }
+        if (want) {
+            p.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            try { web_?.requestFocus() } catch (_: Exception) {}
+        }
+        try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
+    }
+
     /** 让桌宠说一句：气泡 + 动作（上游）+ 本地朗读（TTS）。 */
     private fun say(text: String, actions: List<String> = emptyList()) {
         server?.sendSay(text, actions)
@@ -271,6 +289,11 @@ class PetService : Service() {
             try {
                 tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "pet")
             } catch (_: Exception) {
+            }
+        } else if (!ttsReady && !ttsWarned) {
+            ttsWarned = true
+            handler.post {
+                server?.sendSay("（没找到可用的语音引擎，我先用文字陪你～）", emptyList())
             }
         }
     }
