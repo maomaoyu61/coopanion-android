@@ -135,6 +135,10 @@ class PetService : Service() {
     /** 悬浮小按钮：点一下在「操作手机」和「摸桌宠」之间切换；可拖到任意位置。 */
     private fun addToggleButton(wm: WindowManager) {
         val prefs = getSharedPreferences("pet", Context.MODE_PRIVATE)
+        val dm = resources.displayMetrics
+        val density = dm.density
+        val screenW = dm.widthPixels
+        val screenH = dm.heightPixels
         val size = (density * 46).toInt()
         val p = WindowManager.LayoutParams(
             size, size,
