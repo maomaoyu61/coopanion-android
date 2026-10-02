@@ -27,6 +27,18 @@ class AssetServer(private val ctx: Context) {
     private var walkSeq = 0
     private var walkSide = false
     private var saySeq = 0
+    private val logs = ArrayDeque<String>()
+
+    /** 记一条日志（同时供 /log 接口读取，方便在电脑/容器里排错）。 */
+    fun log(line: String) {
+        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
+        synchronized(logs) {
+            logs.addLast("$ts $line")
+            while (logs.size > 300) logs.removeFirst()
+        }
+    }
+
+    private fun logText(): String = synchronized(logs) { logs.joinToString("\n") }
 
     /** 桌宠发来的事件（打字、摸它、上线…）交给上层处理。 */
     interface PetEvents {
@@ -89,6 +101,7 @@ class AssetServer(private val ctx: Context) {
     private fun handleIncoming(msg: String) {
         try {
             val o = JSONObject(msg)
+            log("收到 <- " + msg.take(120))
             when (o.optString("t")) {
                 "text" -> o.optString("text").takeIf { it.isNotBlank() }?.let { events?.onPetText(it) }
                 "commit" -> {
@@ -199,6 +212,8 @@ class AssetServer(private val ctx: Context) {
                     reply(out, 200, "application/json", p ?: "{}")
                 }
                 path == "/api/avatar" -> reply(out, 404, "text/plain", "no avatar")
+                path == "/log" -> reply(out, 200, "text/plain; charset=utf-8",
+                    logText() + "\n\n-- petOut=" + (petOut != null) + " --")
                 path == "/dress" -> serveAsset(out, "/web/dress.html")
                 else -> serveAsset(out, if (path == "/" || path.isEmpty()) "/web/pet.html" else path)
             }
@@ -267,7 +282,9 @@ class AssetServer(private val ctx: Context) {
 
         // 桌宠连上就收到 init，里面带上已保存的肤色
         if (query.contains("role=pet")) {
+            log("准备给桌宠发 init")
             petOut = out
+            log("桌宠 socket 连上了 ($query)")
             val skin = prefs.getString("skin", null)
             val theme = prefs.getString("prefs", null)
             val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":\"free\",\"sound\":true")

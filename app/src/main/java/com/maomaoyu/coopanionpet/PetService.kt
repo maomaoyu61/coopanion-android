@@ -89,6 +89,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
+        s.log("=== PetService 启动 v1.5 ===")
         s.start()
         server = s
         lastPort = s.port
@@ -252,6 +253,7 @@ class PetService : Service() {
                 MotionEvent.ACTION_UP -> {
                     v.removeCallbacks(longPress)
                     if (!btnMoved) {
+                        server?.log("点了模式按钮 (collapsed=" + btnCollapsed + ")")
                         if (btnCollapsed) expandButton() else togglePassthrough()
                     } else {
                         // 拖到左右边缘附近 → 自动收起成小竖条
@@ -326,6 +328,7 @@ class PetService : Service() {
         p.height = want
         p.y = statusBar
         try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
+        raiseButtons()
         if (on) say("我在这儿呢，你说～", listOf("look"))
     }
 
@@ -342,10 +345,12 @@ class PetService : Service() {
             try { web_?.requestFocus() } catch (_: Exception) {}
         }
         try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
+        raiseButtons()
     }
 
     /** 让桌宠说一句：气泡 + 动作（上游）+ 本地朗读（TTS）。 */
     private fun say(text: String, actions: List<String> = emptyList()) {
+        server?.log("说 -> " + text.take(80) + " (ttsReady=" + ttsReady + ")")
         server?.sendSay(text, actions)
         if (ttsReady && text.isNotBlank()) {
             try {
@@ -364,12 +369,20 @@ class PetService : Service() {
     private fun handleUserText(text: String) {
         if (text.isBlank()) return
         val srv = server ?: return
+        srv.log("用户说: " + text.take(80))
         srv.sendThinking(true)
         Thread({
-            val reply = brain.ask(text)
+            val t0 = System.currentTimeMillis()
+            val reply = try {
+                brain.ask(text)
+            } catch (e: Exception) {
+                "出错了：" + e.javaClass.simpleName
+            }
+            val cost = System.currentTimeMillis() - t0
             handler.post({
+                server?.log("模型返回(" + cost + "ms): " + (reply ?: "null").take(100))
                 server?.sendThinking(false)
-                if (!reply.isNullOrBlank()) say(reply, listOf("nod"))
+                if (!reply.isNullOrBlank()) say(reply, listOf("nod")) else server?.log("回复为空，不发气泡")
             })
         }, "brain").start()
     }
@@ -446,7 +459,10 @@ class PetService : Service() {
                 setColor(0xCC2C7BE5.toInt())
             }
             alpha = 0.9f
-            setOnClickListener { startVoice() }
+            setOnClickListener {
+                server?.log("点了 🎤 语音")
+                startVoice()
+            }
         }
         try { wm.addView(mv, mp) } catch (_: Exception) {}
         mic_ = mv
@@ -475,6 +491,7 @@ class PetService : Service() {
             }
             alpha = 0.9f
             setOnClickListener {
+                server?.log("点了 💬 聊天输入")
                 try {
                     startActivity(Intent(this@PetService, ChatInputActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -485,6 +502,14 @@ class PetService : Service() {
         try { wm.addView(cv, cp) } catch (_: Exception) {}
         chat_ = cv
         chatParams_ = cp
+    }
+
+    /** 主窗口每次变动后，把按钮重新提到最上层，否则会被全屏窗口压住点不到。 */
+    private fun raiseButtons() {
+        val wm = wm_ ?: return
+        try { btn_?.let { v -> wm.removeView(v); wm.addView(v, btnParams_) } } catch (_: Exception) {}
+        try { mic_?.let { v -> wm.removeView(v); wm.addView(v, micParams_) } } catch (_: Exception) {}
+        try { chat_?.let { v -> wm.removeView(v); wm.addView(v, chatParams_) } } catch (_: Exception) {}
     }
 
     /** 让 🎤 跟着圆按钮走（收起时一起隐藏）。 */
