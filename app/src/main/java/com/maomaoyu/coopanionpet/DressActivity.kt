@@ -35,7 +35,7 @@ class DressActivity : Activity() {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         web = view
 
-        Thread {
+        Thread({
             val port = waitForPort()
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) {
