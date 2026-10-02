@@ -678,6 +678,8 @@ class PetService : Service() {
     private var touchWindowStart = 0L
     private var lastPatReplyAt = 0L
     private var loopsStarted = false
+    private var lastNotifyApp = ""
+    private var lastNotifyAt = 0L
 
     private fun petPrefs() = getSharedPreferences("pet", Context.MODE_PRIVATE)
 
@@ -834,6 +836,16 @@ class PetService : Service() {
                 Intent.ACTION_SCREEN_ON -> try { web_?.onResume() } catch (_: Exception) {}
             }
         }
+    }
+
+    /** 收到微信/QQ 通知（只听 App 名，不看内容）。 */
+    fun onAppMessage(app: String) {
+        if (!petPrefs().getBoolean("notify_pet", false)) return
+        val now = System.currentTimeMillis()
+        if (app == lastNotifyApp && now - lastNotifyAt < 60000) return
+        lastNotifyApp = app
+        lastNotifyAt = now
+        handler.post { say(app + "有新消息啦～") }
     }
 
     /** 试听语音（App 里调语速/音高时用）。 */

@@ -219,6 +219,31 @@ class MainActivity : Activity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
+        val schemes = listOf("deepseek", "claude", "chatgpt", "gemini", "harness", "kimi", "minimax", "qwen")
+        val schemeSp = android.widget.Spinner(this)
+        schemeSp.adapter = android.widget.ArrayAdapter(this,
+            android.R.layout.simple_spinner_dropdown_item, schemes.map { "配色：" + it })
+        schemeSp.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                try {
+                    val cur = org.json.JSONObject(prefs.getString("skin", "{}"))
+                    cur.put("figure", "whale")
+                    cur.put("scheme", schemes[position])
+                    prefs.edit().putString("skin", cur.toString()).apply()
+                    PetService.instance?.reloadPet()
+                } catch (_: Exception) {
+                }
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+        col.addView(card().apply {
+            addView(TextView(this@MainActivity).apply {
+                text = "快捷配色（不用进装扮页）"
+                textSize = 12f
+                setTextColor(0xFF6B74A8.toInt())
+            })
+            addView(schemeSp)
+        })
         col.addView(card().apply {
             addView(scaleLabel)
             addView(seek)
@@ -287,6 +312,20 @@ class MainActivity : Activity() {
                 isChecked = prefs.getBoolean("power_save", true)
                 setTextColor(0xFF2A3876.toInt())
                 setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("power_save", c).apply() }
+            })
+            addView(CheckBox(this@MainActivity).apply {
+                text = "微信/QQ 有消息时她提醒我（需通知使用权，只看 App 名不看内容）"
+                textSize = 14f
+                isChecked = prefs.getBoolean("notify_pet", false)
+                setTextColor(0xFF2A3876.toInt())
+                setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("notify_pet", c).apply() }
+            })
+            addView(pill("去开启通知使用权", false) {
+                try {
+                    startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+                } catch (e: Exception) {
+                    toast("这台手机没有这个设置页")
+                }
             })
             addView(affLabel)
             addView(remindLabel)
