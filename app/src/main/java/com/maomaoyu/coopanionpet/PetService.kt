@@ -753,12 +753,10 @@ class PetService : Service() {
     private fun paintButton(v: TextView, gray: Boolean) {
         val dm = resources.displayMetrics
         if (btnCollapsed) {
-            v.background = GradientDrawable().apply {
-                cornerRadius = dm.density * 7
-                setColor(0xB32C5FD8.toInt())
-            }
+            v.background = resources.getDrawable(
+                if (gray) R.drawable.btn_collapsed_use else R.drawable.btn_collapsed_pet, null)
             v.text = ""
-            v.alpha = 0.8f
+            v.alpha = 0.95f
             return
         }
         v.background = GradientDrawable().apply {
@@ -786,12 +784,11 @@ class PetService : Service() {
         val p = btnParams_ ?: return
         val dm = resources.displayMetrics
         btnCollapsed = true
-        p.width = (dm.density * 14).toInt()
+        p.width = (dm.density * 28).toInt()
         p.height = (dm.density * 56).toInt()
         if (btnSide == 0) p.x = 0 else p.x = dm.widthPixels - p.width
         v.text = ""
         v.textSize = 13f
-        v.text = if (btnSide == 0) "\u203A" else "\u2039"
         v.alpha = 0.75f
         v.background = GradientDrawable().apply {
             cornerRadius = dm.density * 7
