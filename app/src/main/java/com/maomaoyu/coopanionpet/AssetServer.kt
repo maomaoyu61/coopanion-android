@@ -265,7 +265,6 @@ class AssetServer(private val ctx: Context) {
                     "};</script>"
                 val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + hostJs + "</head>")
                               else css + hostJs + html
-                              else css + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }
             val head = "HTTP/1.1 200 OK\r\nContent-Type: ${mimeOf(path)}\r\nContent-Length: ${data.size}\r\n" +
