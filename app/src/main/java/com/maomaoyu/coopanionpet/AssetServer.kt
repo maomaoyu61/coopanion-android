@@ -20,6 +20,21 @@ import java.util.Base64
 class AssetServer(private val ctx: Context) {
 
     private var serverSocket: ServerSocket? = null
+    @Volatile
+    private var petOut: java.io.OutputStream? = null
+    private var walkSeq = 0
+
+    /** 让桌宠播放"走路"动画（窗口移动由 PetService 负责）。 */
+    fun petWalk(run: Boolean = false) {
+        val out = petOut ?: return
+        walkSeq++
+        val json = "{\"t\":\"walk\",\"id\":\"w$walkSeq\",\"to\":0.5,\"run\":$run}"
+        try {
+            synchronized(out) { sendText(out, json) }
+        } catch (_: Exception) {
+            petOut = null
+        }
+    }
     var port: Int = 0
         private set
 
@@ -134,7 +149,17 @@ class AssetServer(private val ctx: Context) {
         val assetPath = path.trimStart('/')
         try {
             val stream: InputStream = ctx.assets.open(assetPath)
-            val data = stream.use { it.readBytes() }
+            var data = stream.use { it.readBytes() }
+            if (path.endsWith("/pet.html") || path == "/web/pet.html") {
+                val html = String(data, Charsets.UTF_8)
+                val css = "<style>html,body{background:transparent!important;" +
+                        "background-color:transparent!important;background-image:none!important}" +
+                        "body.tab{background:transparent!important;background-image:none!important}" +
+                        "body.tab .floor{display:none!important}</style>"
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + "</head>")
+                              else css + html
+                data = patched.toByteArray(Charsets.UTF_8)
+            }
             val head = "HTTP/1.1 200 OK\r\nContent-Type: ${mimeOf(path)}\r\nContent-Length: ${data.size}\r\n" +
                     "Cache-Control: no-store\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n"
             out.write(head.toByteArray(Charsets.ISO_8859_1))
@@ -159,9 +184,10 @@ class AssetServer(private val ctx: Context) {
 
         // 桌宠连上就收到 init，里面带上已保存的肤色
         if (query.contains("role=pet")) {
+            petOut = out
             val skin = prefs.getString("skin", null)
             val theme = prefs.getString("prefs", null)
-            val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":false,\"sound\":false")
+            val sb = StringBuilder("{\"t\":\"init\",\"scale\":1,\"roam\":\"off\",\"sound\":false")
             if (theme != null && theme.contains("dark")) sb.append(",\"theme\":\"dark\"")
             if (skin != null && skin.length > 2) {
                 // 装扮页 POST 的是 {"skin":{...}}，这里取内层对象

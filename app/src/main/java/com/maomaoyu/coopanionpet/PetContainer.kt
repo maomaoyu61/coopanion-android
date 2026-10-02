@@ -20,7 +20,8 @@ import kotlin.math.abs
 class PetContainer(
     context: Context,
     private val wm: WindowManager,
-    private val params: WindowManager.LayoutParams
+    private val params: WindowManager.LayoutParams,
+    private val onDragChanged: ((Boolean) -> Unit)? = null
 ) : FrameLayout(context) {
 
     private var downRawX = 0f
@@ -43,6 +44,7 @@ class PetContainer(
                 if (!dragging &&
                     (abs(ev.rawX - downRawX) > slop || abs(ev.rawY - downRawY) > slop)) {
                     dragging = true
+                    onDragChanged?.invoke(true)
                 }
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> dragging = false
@@ -65,6 +67,7 @@ class PetContainer(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val was = dragging
+                if (was) onDragChanged?.invoke(false)
                 dragging = false
                 if (was) {
                     try {
