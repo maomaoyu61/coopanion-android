@@ -2,6 +2,12 @@ name: build-apk
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/**'
+      - '*.gradle.kts'
+      - 'gradle.properties'
 
 jobs:
   build:
@@ -15,18 +21,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
+      # runner 自带 Android SDK，不用 android-actions/setup-android
+      # （那个 action 会去装已被移除的 'tools' 包，直接失败）
       - name: Install SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          set -e
+          SDKMGR=$(ls "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          echo "sdkmanager: $SDKMGR"
+          test -n "$SDKMGR"
+          yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
+          "$SDKMGR" --install "platforms;android-34" "build-tools;34.0.0" || true
+          echo "ANDROID_HOME=$ANDROID_HOME"
 
       - name: Fetch Coopanion pet web assets from upstream
         run: |
           set -e
           curl -sSL -o coopanion.tar.gz https://codeload.github.com/Pal-AI-Lab/Coopanion/tar.gz/refs/heads/main
           tar xzf coopanion.tar.gz
-          SRC=$(find . -maxdepth 5 -type d -name web -path '*cortico-world-desktop-pet*' | head -1)
+          SRC=$(find . -type d -path '*/packages/cortico-world-desktop-pet/web' | head -1)
           echo "asset source: $SRC"
           test -n "$SRC"
           mkdir -p app/src/main/assets
