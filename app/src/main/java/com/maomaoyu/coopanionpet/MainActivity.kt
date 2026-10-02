@@ -121,6 +121,8 @@ class MainActivity : Activity() {
                 startForegroundService(Intent(this@MainActivity, PetService::class.java))
                 toast("已保存，桌宠重启中…")
             })
+            addView(pill("导出配置到剪贴板", false) { exportConfig() })
+            addView(pill("从剪贴板导入配置", false) { importConfig() })
             addView(pill("清空聊天记忆", false) {
                 Brain(this@MainActivity).clearMemory()
                 toast("记忆已清空")
@@ -268,6 +270,46 @@ class MainActivity : Activity() {
         box.addView(et)
         parent.addView(box)
         return et
+    }
+
+    /** 把配置（含 API Key）复制到剪贴板，重装或换机后粘回来即可。 */
+    private fun exportConfig() {
+        try {
+            val o = org.json.JSONObject()
+            for (k in listOf("api_base", "api_key", "api_model", "persona")) {
+                o.put(k, prefs.getString(k, ""))
+            }
+            o.put("scale", prefs.getFloat("scale", 1f).toDouble())
+            o.put("sound", prefs.getBoolean("sound", true))
+            o.put("tts_rate", prefs.getFloat("tts_rate", 1f).toDouble())
+            o.put("tts_pitch", prefs.getFloat("tts_pitch", 1f).toDouble())
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("coopanion", o.toString()))
+            toast("配置已复制到剪贴板（含 Key，别外发）")
+        } catch (e: Exception) {
+            toast("导出失败：" + e.javaClass.simpleName)
+        }
+    }
+
+    /** 从剪贴板恢复配置。 */
+    private fun importConfig() {
+        try {
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            val s = cm.primaryClip?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+            val o = org.json.JSONObject(s)
+            val e = prefs.edit()
+            for (k in listOf("api_base", "api_key", "api_model", "persona")) {
+                if (o.has(k)) e.putString(k, o.getString(k))
+            }
+            if (o.has("scale")) e.putFloat("scale", o.getDouble("scale").toFloat())
+            if (o.has("sound")) e.putBoolean("sound", o.getBoolean("sound"))
+            if (o.has("tts_rate")) e.putFloat("tts_rate", o.getDouble("tts_rate").toFloat())
+            if (o.has("tts_pitch")) e.putFloat("tts_pitch", o.getDouble("tts_pitch").toFloat())
+            e.apply()
+            toast("配置已导入 ✓ 点「保存并重启桌宠」生效")
+        } catch (e: Exception) {
+            toast("剪贴板里没有可用的配置")
+        }
     }
 
     private fun toast(msg: String) {

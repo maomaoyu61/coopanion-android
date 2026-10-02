@@ -644,17 +644,40 @@ class PetService : Service() {
         raiseButtons()
     }
 
+    /**
+     * 朗读一句话。
+     * 后台 Service 绑不上系统 TTS 引擎（日志里初始化回调从未触发），
+     * 所以优先用 Service 的 TTS，失败就交给网页的 speechSynthesis —— 同一个系统引擎，
+     * 但由前台页面发起，能正常出声。
+     */
+    private fun speakAloud(text: String) {
+        if (text.isBlank()) return
+        val p = getSharedPreferences("pet", Context.MODE_PRIVATE)
+        val rate = p.getFloat("tts_rate", 1f)
+        val pitch = p.getFloat("tts_pitch", 1f)
+        if (ttsReady) {
+            try {
+                tts?.setSpeechRate(rate)
+                tts?.setPitch(pitch)
+                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "pet")
+                return
+            } catch (_: Exception) {
+            }
+        }
+        val esc = text.replace("\\", "\\\\").replace(", \").replace("\n", " ")
+        val js = "(function(){try{var u=new SpeechSynthesisUtterance('" + esc + "');" +
+            "u.lang='zh-CN';u.rate=" + rate + ";u.pitch=" + pitch + ";" +
+            "window.speechSynthesis.cancel();window.speechSynthesis.speak(u);}catch(e){}})()"
+        try { web_?.evaluateJavascript(js, null) } catch (_: Exception) {}
+    }
+
     /** 让桌宠说一句：气泡 + 动作（上游）+ 本地朗读（TTS）。 */
     private fun say(text: String, actions: List<String> = emptyList()) {
         server?.log("说 -> " + text.take(80) + " (ttsReady=" + ttsReady + ")")
         server?.sendSay(text, actions)
         showBubble(text)
-        if (ttsReady && text.isNotBlank()) {
-            try {
-                tts?.speak(text, TextToSpeech.QUEUE_ADD, null, "pet")
-            } catch (_: Exception) {
-            }
-        } else if (!ttsReady && !ttsWarned) {
+        speakAloud(text)
+        if (!ttsReady && !ttsWarned) {
             ttsWarned = true
             handler.post {
                 server?.sendSay("（没找到可用的语音引擎，我先用文字陪你～）", emptyList())
