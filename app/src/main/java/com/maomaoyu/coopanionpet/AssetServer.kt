@@ -5,6 +5,8 @@ import java.io.InputStream
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import org.json.JSONArray
+import org.json.JSONObject
 import java.security.MessageDigest
 import java.util.Base64
 
@@ -24,6 +26,81 @@ class AssetServer(private val ctx: Context) {
     private var petOut: java.io.OutputStream? = null
     private var walkSeq = 0
     private var walkSide = false
+    private var saySeq = 0
+
+    /** 桌宠发来的事件（打字、摸它、上线…）交给上层处理。 */
+    interface PetEvents {
+        fun onPetText(text: String)
+        fun onPetTouch()
+        fun onPetHello()
+        fun onPetOther(type: String, raw: String)
+    }
+
+    @Volatile
+    var events: PetEvents? = null
+
+    /** 让桌宠说话（可带动作）。 */
+    fun sendSay(text: String, actions: List<String> = emptyList()) {
+        val out = petOut ?: return
+        saySeq++
+        val beat = JSONObject().apply {
+            put("text", text)
+            put("actions", JSONArray(actions))
+            put("anchors", JSONArray())
+        }
+        val msg = JSONObject().apply {
+            put("t", "say")
+            put("id", "s$saySeq")
+            put("beats", JSONArray().put(beat))
+        }
+        rawToPet(out, msg.toString())
+    }
+
+    /** 提问（own=true 时气泡里会出现输入框，用户可以打字）。 */
+    fun sendAsk(question: String, options: List<String>, own: Boolean) {
+        val out = petOut ?: return
+        saySeq++
+        val msg = JSONObject().apply {
+            put("t", "ask")
+            put("id", "a$saySeq")
+            put("question", question)
+            put("options", JSONArray(options))
+            put("own", own)
+        }
+        rawToPet(out, msg.toString())
+    }
+
+    /** 头顶转圈（思考中）。 */
+    fun sendThinking(on: Boolean) {
+        val out = petOut ?: return
+        val msg = JSONObject().apply { put("t", "thinking"); put("on", on) }
+        rawToPet(out, msg.toString())
+    }
+
+    private fun rawToPet(out: java.io.OutputStream, json: String) {
+        try {
+            synchronized(out) { sendText(out, json) }
+        } catch (_: Exception) {
+            petOut = null
+        }
+    }
+
+    private fun handleIncoming(msg: String) {
+        try {
+            val o = JSONObject(msg)
+            when (o.optString("t")) {
+                "text" -> o.optString("text").takeIf { it.isNotBlank() }?.let { events?.onPetText(it) }
+                "commit" -> {
+                    val s = o.optString("text")
+                    if (s.isNotBlank()) events?.onPetText(s) else events?.onPetOther("commit", msg)
+                }
+                "touch" -> events?.onPetTouch()
+                "hello" -> events?.onPetHello()
+                else -> events?.onPetOther(o.optString("t"), msg)
+            }
+        } catch (_: Exception) {
+        }
+    }
 
     /** 让桌宠播放"走路"动画（窗口移动由 PetService 负责）。 */
     fun petWalk(run: Boolean = false) {
@@ -236,6 +313,7 @@ class AssetServer(private val ctx: Context) {
                     got += n
                 }
                 when (opcode) {
+                    0x1 -> handleIncoming(String(payload, Charsets.UTF_8))
                     0x8 -> { sendFrame(out, 0x8, ByteArray(0)); break }
                     0x9 -> sendFrame(out, 0xA, payload)
                 }

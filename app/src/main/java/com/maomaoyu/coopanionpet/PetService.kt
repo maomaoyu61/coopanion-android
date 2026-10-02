@@ -48,6 +48,9 @@ class PetService : Service() {
     private var btn_: TextView? = null
     private var btnParams_: WindowManager.LayoutParams? = null
     private var btnMoved = false
+    private val brain by lazy { Brain(this) }
+    private var voice: android.speech.SpeechRecognizer? = null
+    private val longPress = Runnable { startVoice() }
     private var btnCollapsed = false
     private var btnSide = 1   // 0=左 1=右
     private var btnDownX = 0f
@@ -70,6 +73,29 @@ class PetService : Service() {
         s.start()
         server = s
         lastPort = s.port
+        s.events = object : AssetServer.PetEvents {
+            override fun onPetText(text: String) {
+                handleUserText(text)
+            }
+
+            override fun onPetTouch() {
+            }
+
+            override fun onPetHello() {
+                handler.postDelayed({
+                    val srv = server ?: return@postDelayed
+                    if (brain.configured()) {
+                        srv.sendSay("我在这儿～ 想聊点什么？", listOf("hop"))
+                        srv.sendAsk("想聊什么呀？", listOf("随便聊聊", "夸夸我", "讲个冷笑话"), true)
+                    } else {
+                        srv.sendSay("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。", listOf("nod"))
+                    }
+                }, 1600)
+            }
+
+            override fun onPetOther(type: String, raw: String) {
+            }
+        }
         attachPet(s.port)
     }
 
@@ -168,10 +194,14 @@ class PetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     btnDownX = ev.rawX; btnDownY = ev.rawY
                     btnStartX = p.x; btnStartY = p.y; btnMoved = false
+                    v.postDelayed(longPress, 650)
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    if (abs(ev.rawX - btnDownX) > slop || abs(ev.rawY - btnDownY) > slop) btnMoved = true
+                    if (abs(ev.rawX - btnDownX) > slop || abs(ev.rawY - btnDownY) > slop) {
+                        btnMoved = true
+                        v.removeCallbacks(longPress)
+                    }
                     if (btnMoved) {
                         if (btnCollapsed) {
                             p.y = (btnStartY + (ev.rawY - btnDownY)).toInt()
@@ -187,6 +217,7 @@ class PetService : Service() {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    v.removeCallbacks(longPress)
                     if (!btnMoved) {
                         if (btnCollapsed) expandButton() else togglePassthrough()
                     } else {
@@ -207,6 +238,67 @@ class PetService : Service() {
         btn_ = tv
         btnParams_ = p
         if (prefs.getBoolean("btn_collapsed", false)) collapseButton()
+    }
+
+    /** 用户说的话（打字或语音）→ 交给 Brain → 让桌宠说出来。 */
+    private fun handleUserText(text: String) {
+        if (text.isBlank()) return
+        val srv = server ?: return
+        srv.sendThinking(true)
+        Thread({
+            val reply = brain.ask(text)
+            handler.post({
+                server?.sendThinking(false)
+                if (!reply.isNullOrBlank()) server?.sendSay(reply, listOf("nod"))
+            })
+        }, "brain").start()
+    }
+
+    /** 长按悬浮按钮 = 语音输入（走安卓系统识别）。 */
+    private fun startVoice() {
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            server?.sendSay("先去 App 里给我麦克风权限吧～", listOf("nod"))
+            return
+        }
+        try {
+            voice?.destroy()
+            val sr = android.speech.SpeechRecognizer.createSpeechRecognizer(this)
+            voice = sr
+            sr.setRecognitionListener(object : android.speech.RecognitionListener {
+                override fun onReadyForSpeech(params: android.os.Bundle?) {
+                    server?.sendSay("我在听…", listOf("look"))
+                }
+
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onPartialResults(partialResults: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+
+                override fun onError(error: Int) {
+                    sr.destroy(); voice = null
+                    server?.sendSay("没听清～再长按我一下？", listOf("nod"))
+                }
+
+                override fun onResults(results: android.os.Bundle?) {
+                    val said = results
+                        ?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull()
+                    sr.destroy(); voice = null
+                    if (!said.isNullOrBlank()) handleUserText(said)
+                }
+            })
+            val i = android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+            }
+            sr.startListening(i)
+        } catch (e: Exception) {
+            server?.sendSay("语音没起来…（${e.javaClass.simpleName}）", listOf("nod"))
+        }
     }
 
     private fun paintButton(v: TextView, gray: Boolean) {
@@ -340,6 +432,8 @@ class PetService : Service() {
             root_?.let { wm_?.removeView(it) }
         } catch (_: Exception) {
         }
+        try { voice?.destroy() } catch (_: Exception) {}
+        voice = null
         try { btn_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         btn_ = null
         web_?.destroy()
