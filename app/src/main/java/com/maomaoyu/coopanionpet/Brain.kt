@@ -41,8 +41,13 @@ class Brain(private val ctx: Context) {
         if (key.isEmpty()) {
             return "我还没有 API Key 呢 —— 打开 App 填一个，我就能陪你聊天啦。"
         }
-        val base = prefs.getString("api_base", DEFAULT_BASE).orEmpty().trim().trimEnd('/')
-        val model = prefs.getString("api_model", DEFAULT_MODEL).orEmpty().trim()
+        // 注意：getString(key, default) 只在「键不存在」时给默认值；
+        // 用户存了坏值（空串 / 把 Key 填错栏）时依然拿到坏值 → 必须自己判。
+        var base = rawBase.trimEnd('/')
+        if (base.isNotEmpty() && !base.startsWith("http")) base = "https://" + base
+        val base0 = base
+        if (!base.startsWith("http")) base = DEFAULT_BASE
+        val model = prefs.getString("api_model", "").orEmpty().trim().ifEmpty { DEFAULT_MODEL }
         val persona = prefs.getString("persona", DEFAULT_PERSONA).orEmpty()
 
         val hist = history()
