@@ -261,7 +261,8 @@ class AssetServer(private val ctx: Context) {
                     "releaseFocus:function(){}," +
                     "hide:function(){}," +
                     "onCursor:function(){}," +
-                    "followCursor:function(){return Promise.resolve(null);}" +
+                    "followCursor:function(){return Promise.resolve(null);}," +
+                    "sampleBackdrop:function(){return new Array(300).fill(255);}" +
                     "};</script>"
                 val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + hostJs + "</head>")
                               else css + hostJs + html

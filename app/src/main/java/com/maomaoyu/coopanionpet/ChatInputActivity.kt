@@ -34,14 +34,14 @@ class ChatInputActivity : Activity() {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(pad, pad, pad, pad)
-            setBackgroundColor(0xF01B1B20.toInt())
+            setBackgroundColor(0xFFF2F3F5.toInt())
         }
 
         val input = EditText(this).apply {
             hint = "跟大肥鱼说点什么…"
             textSize = 15f
-            setTextColor(Color.WHITE)
-            setHintTextColor(0xFF9AA0A6.toInt())
+            setTextColor(0xFF111111.toInt())
+            setHintTextColor(0xFF888888.toInt())
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_SEND

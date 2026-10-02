@@ -177,6 +177,12 @@ class PetService : Service() {
                 settings.setAlgorithmicDarkeningAllowed(false)
             }
             webViewClient = WebViewClient()
+            webChromeClient = object : android.webkit.WebChromeClient() {
+                override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                    server?.log("页面: " + m.message().take(180) + " @" + m.lineNumber())
+                    return true
+                }
+            }
         }
         web.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
         web_ = web
@@ -480,6 +486,43 @@ class PetService : Service() {
                 setColor(0xCC8E44AD.toInt())
             }
             alpha = 0.9f
+            val slop2 = ViewConfiguration.get(this).scaledTouchSlop
+            var mdX = 0f; var mdY = 0f; var moved2 = false
+            setOnTouchListener { v2, ev2 ->
+                val tp = btnParams_
+                if (tp == null) { false } else {
+                    when (ev2.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> {
+                            mdX = ev2.rawX; mdY = ev2.rawY; moved2 = false; true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            if (abs(ev2.rawX - mdX) > slop2 || abs(ev2.rawY - mdY) > slop2) moved2 = true
+                            if (moved2) {
+                                tp.x = (tp.x + (ev2.rawX - mdX)).toInt()
+                                tp.y = (tp.y + (ev2.rawY - mdY)).toInt()
+                                mdX = ev2.rawX; mdY = ev2.rawY
+                                try { wm_?.updateViewLayout(btn_, tp) } catch (_: Exception) {}
+                                syncMic()
+                            }
+                            true
+                        }
+                        MotionEvent.ACTION_UP -> {
+                            if (!moved2) {
+                                server?.log("点了 💬 聊天输入")
+                                try {
+                                    startActivity(Intent(this@PetService, ChatInputActivity::class.java)
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                } catch (_: Exception) {
+                                }
+                            } else {
+                                saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                }
+            }
             setOnClickListener {
                 server?.log("点了 💬 聊天输入")
                 try {
