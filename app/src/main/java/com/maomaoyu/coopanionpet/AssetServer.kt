@@ -196,6 +196,7 @@ class AssetServer(private val ctx: Context) {
             while (!ss.isClosed) {
                 try {
                     val client = ss.accept()
+                    try { client.soTimeout = 8000 } catch (_: Exception) {}
                     Thread { handle(client) }.start()
                 } catch (e: Exception) {
                     break
@@ -266,9 +267,12 @@ class AssetServer(private val ctx: Context) {
                 }
                 path == "/api/avatar" -> reply(out, 404, "text/plain", "no avatar")
                 path == "/debug/js" -> {
-                    val code = parts.getOrNull(2)?.substringAfter("code=", "")?.let {
-                        java.net.URLDecoder.decode(it, "UTF-8")
-                    } ?: ""
+                    // 注意：查询串在 parts[1]（请求行是 "GET /path?query HTTP/1.1"），
+                    // 之前从 parts[2] 取，那是 HTTP 版本号，所以永远是空
+                    val raw = parts.getOrNull(1)?.substringAfter("code=", "") ?: ""
+                    val code = if (raw.isEmpty()) "" else try {
+                        java.net.URLDecoder.decode(raw, "UTF-8")
+                    } catch (_: Exception) { raw }
                     log("执行JS: " + code.take(120))
                     onEval?.invoke(code)
                     reply(out, 200, "text/plain", "ok")
@@ -368,6 +372,7 @@ class AssetServer(private val ctx: Context) {
         // 桌宠连上就收到 init，里面带上已保存的肤色
         if (query.contains("role=pet")) {
             log("准备给桌宠发 init")
+            try { sock.soTimeout = 0 } catch (_: Exception) {}
             petOut = out
             petSock = sock
             log("桌宠 socket 连上了 ($query)")
