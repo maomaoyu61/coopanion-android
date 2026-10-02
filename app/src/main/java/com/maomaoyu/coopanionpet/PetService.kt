@@ -90,6 +90,7 @@ class PetService : Service() {
         } else {
             startForeground(NOTIF_ID, buildNotification())
         }
+        handler.postDelayed(petTrack, 1200)
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             server?.log("TTS 初始化 status=" + status + " (0=SUCCESS)")
@@ -459,6 +460,47 @@ class PetService : Service() {
 
     private val hideBubble = Runnable { bubble_?.visibility = android.view.View.GONE }
 
+    /**
+     * 让气泡跟着桌宠走：周期性问页面 #pet 的包围盒，把气泡摆到她头顶上方。
+     */
+    private val petTrack = object : Runnable {
+        override fun run() {
+            val w = web_
+            if (w != null && bubble_?.visibility == android.view.View.VISIBLE) {
+                try {
+                    w.evaluateJavascript(
+                        "(function(){var e=document.querySelector('#pet');" +
+                        "if(!e)return '';var r=e.getBoundingClientRect();" +
+                        "return Math.round(r.left)+','+Math.round(r.top)+','+" +
+                        "Math.round(r.width)+','+Math.round(r.height);})()"
+                    ) { res ->
+                        val s = (res ?: "").trim('"')
+                        val a = s.split(",")
+                        val b = bubble_
+                        val p = bubbleParams_
+                        val wm = wm_
+                        if (a.size == 4 && b != null && p != null && wm != null) {
+                            try {
+                                val dens = resources.displayMetrics.density
+                                val px = a[0].toFloat() * dens
+                                val py = a[1].toFloat() * dens
+                                val pw = a[2].toFloat() * dens
+                                val sw = resources.displayMetrics.widthPixels
+                                val bh = if (b.height > 0) b.height else (dens * 64).toInt()
+                                p.x = (px + pw / 2f - p.width / 2f).toInt().coerceIn(0, (sw - p.width).coerceAtLeast(0))
+                                p.y = (py - bh - (dens * 10).toInt()).coerceAtLeast(0)
+                                wm.updateViewLayout(b, p)
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            handler.postDelayed(this, 350)
+        }
+    }
+
     /** 把气泡重新提到最上层（全屏桌宠窗口被 updateViewLayout 时会压住它）。 */
     private fun raiseBubble() {
         val wm = wm_ ?: return
@@ -762,13 +804,17 @@ class PetService : Service() {
         val p = btnParams_ ?: return
         val dm = resources.displayMetrics
         btnCollapsed = true
-        val barW = (dm.density * 7).toInt()
-        val barH = (dm.density * 64).toInt()
-        p.width = barW
-        p.height = barH
-        p.x = if (btnSide == 0) 0 else dm.widthPixels - barW
-        p.y = p.y.coerceIn(0, dm.heightPixels - barH)
-        paintButton(v, passthrough)
+        p.width = (dm.density * 14).toInt()
+        p.height = (dm.density * 56).toInt()
+        if (btnSide == "left") p.x = 0 else p.x = dm.widthPixels - p.width
+        v.text = ""
+        v.textSize = 13f
+        v.text = if (btnSide == "left") "\u203A" else "\u2039"
+        v.alpha = 0.75f
+        v.background = GradientDrawable().apply {
+            cornerRadius = dm.density * 7
+            setColor(0xB32C7BE5.toInt())
+        }
         try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
         syncMic()
         saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))

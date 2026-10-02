@@ -43,7 +43,7 @@ class MainActivity : Activity() {
         }
 
         // ── 标题卡 ──
-        col.addView(card(0xFF1B2233.toInt(), 20f).apply {
+        col.addView(card(0xFF1B2233.toInt(), 20f, true).apply {
             addView(TextView(this@MainActivity).apply {
                 text = "\uD83D\uDC33  Coopanion 桌宠"
                 textSize = 21f
@@ -125,14 +125,13 @@ class MainActivity : Activity() {
 
     /* ---------- 小工具 ---------- */
 
-    private fun card(bg: Int = Color.WHITE, radius: Float = 16f): LinearLayout =
+    private fun card(bg: Int = Color.WHITE, radius: Float = 16f, gradient: Boolean = false): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((d * 14).toInt(), (d * 12).toInt(), (d * 14).toInt(), (d * 12).toInt())
-            background = GradientDrawable().apply {
-                cornerRadius = d * radius
-                setColor(bg)
-            }
+            background = if (gradient) GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xFF33558F.toInt(), 0xFF1B2233.toInt())).apply { cornerRadius = d * radius }
+            else GradientDrawable().apply { cornerRadius = d * radius; setColor(bg) }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (d * 12).toInt() }
@@ -154,15 +153,19 @@ class MainActivity : Activity() {
             setLineSpacing(d * 5, 1f)
         }
 
-    private fun pill(label: String, bg: Int, onClick: () -> Unit): Button =
+    private fun pill(label: String, primary: Boolean, onClick: () -> Unit): Button =
         Button(this).apply {
             text = label
             textSize = 15f
             isAllCaps = false
-            setTextColor(Color.WHITE)
+            setTextColor(if (primary) Color.WHITE else 0xFF2C5FD8.toInt())
             background = GradientDrawable().apply {
-                cornerRadius = d * 12
-                setColor(bg)
+                cornerRadius = d * 14
+                if (primary) setColor(0xFF2C5FD8.toInt())
+                else {
+                    setColor(0xFFFFFFFF.toInt())
+                    setStroke((d * 1.2f).toInt(), 0xFFC9D6F2.toInt())
+                }
             }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
