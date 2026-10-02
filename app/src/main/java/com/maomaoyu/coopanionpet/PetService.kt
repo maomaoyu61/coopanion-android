@@ -389,6 +389,7 @@ class PetService : Service() {
         }
         val v = input_ ?: return
         val p = inputParams_ ?: return
+        setComposing(true)
         try { wm.removeView(v) } catch (_: Exception) {}
         try { wm.addView(v, p) } catch (_: Exception) {}
         raiseButtons()
@@ -409,6 +410,7 @@ class PetService : Service() {
 
     private fun hideChatInput() {
         val wm = wm_ ?: return
+        setComposing(false)
         val v = input_ ?: return
         try { wm.removeView(v) } catch (_: Exception) {}
         try {
@@ -452,6 +454,16 @@ class PetService : Service() {
     }
 
     private val hideBubble = Runnable { bubble_?.visibility = android.view.View.GONE }
+
+    /** 把气泡重新提到最上层（全屏桌宠窗口被 updateViewLayout 时会压住它）。 */
+    private fun raiseBubble() {
+        val wm = wm_ ?: return
+        val v = bubble_ ?: return
+        val p = bubbleParams_ ?: return
+        if (v.visibility != android.view.View.VISIBLE) return
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try { wm.addView(v, p) } catch (_: Exception) {}
+    }
 
     private fun showBubble(text: String) {
         val wm = wm_ ?: return
