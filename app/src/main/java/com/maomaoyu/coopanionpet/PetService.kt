@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.7 ===")
+        s.log("=== PetService 启动 v3.8 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -845,7 +845,16 @@ class PetService : Service() {
             if (!petPrefs().getBoolean("power_save", true)) return
             when (i?.action) {
                 Intent.ACTION_SCREEN_OFF -> try { web_?.onPause() } catch (_: Exception) {}
-                Intent.ACTION_SCREEN_ON -> try { web_?.onResume() } catch (_: Exception) {}
+                Intent.ACTION_SCREEN_ON -> {
+                    try { web_?.onResume() } catch (_: Exception) {}
+                    // 省电暂停可能把网页的 socket 弄断了 → 亮屏后自检，断了就重载
+                    handler.postDelayed({
+                        if (server?.isPetConnected() != true) {
+                            server?.log("亮屏后发现桌宠 socket 断了 → 自动重载")
+                            reloadPet()
+                        }
+                    }, 2500)
+                }
             }
         }
     }

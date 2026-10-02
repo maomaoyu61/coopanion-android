@@ -59,6 +59,9 @@ class AssetServer(private val ctx: Context) {
         }
     }
 
+    /** 桌宠网页的 socket 还连着吗（省电暂停后可能已断开）。 */
+    fun isPetConnected(): Boolean = petOut != null
+
     private fun logText(): String = synchronized(logs) { logs.joinToString("\n") }
 
     /** 桌宠发来的事件（打字、摸它、上线…）交给上层处理。 */
