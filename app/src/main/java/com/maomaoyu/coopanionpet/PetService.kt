@@ -141,6 +141,7 @@ class PetService : Service() {
             }
 
             override fun onPetTouch() {
+                onTouched()
             }
 
             override fun onPetHello() {
@@ -239,6 +240,13 @@ class PetService : Service() {
             return
         }
         addNativeBubble(wm, dm)
+        addStatusBar(wm, dm)
+        if (!loopsStarted) {
+            loopsStarted = true
+            handler.postDelayed(dshPoll, 2500)
+            handler.postDelayed(idleChat, 90000)
+            handler.postDelayed(reminder, 30000)
+        }
         addToggleButton(wm)
     }
 
@@ -650,6 +658,165 @@ class PetService : Service() {
      * 所以优先用 Service 的 TTS，失败就交给网页的 speechSynthesis —— 同一个系统引擎，
      * 但由前台页面发起，能正常出声。
      */
+    /* ================= P1：DSH 状态联动 / 主动搭话 / 摸头回话 / 番茄钟 ================= */
+
+    private var status_: TextView? = null
+    private var statusParams_: WindowManager.LayoutParams? = null
+    private var dshState = ""
+    private var dshStatus = ""
+    private var lastUserAt = System.currentTimeMillis()
+    private var lastIdleChatAt = 0L
+    private var touchCount = 0
+    private var touchWindowStart = 0L
+    private var lastPatReplyAt = 0L
+    private var loopsStarted = false
+
+    private fun petPrefs() = getSharedPreferences("pet", Context.MODE_PRIVATE)
+
+    private fun addStatusBar(wm: WindowManager, dm: android.util.DisplayMetrics) {
+        val v = TextView(this).apply {
+            textSize = 11f
+            setTextColor(0xFFFFFFFF.toInt())
+            setPadding((dm.density * 10).toInt(), (dm.density * 5).toInt(),
+                (dm.density * 10).toInt(), (dm.density * 5).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = dm.density * 10
+                setColor(0xD91B2233.toInt())
+            }
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = android.view.View.GONE
+        }
+        val p = WindowManager.LayoutParams(
+            (dm.widthPixels * 0.72f).toInt(),
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = (dm.widthPixels * 0.14f).toInt()
+            y = dimen("status_bar_height") + (dm.density * 6).toInt()
+        }
+        try { wm.addView(v, p) } catch (_: Exception) {}
+        status_ = v
+        statusParams_ = p
+    }
+
+    private fun showStatus(t: String) {
+        val wm = wm_ ?: return
+        val v = status_ ?: return
+        val p = statusParams_ ?: return
+        v.text = t
+        v.visibility = android.view.View.VISIBLE
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try { wm.addView(v, p) } catch (_: Exception) {}
+    }
+
+    private fun hideStatus() {
+        status_?.visibility = android.view.View.GONE
+    }
+
+    private val dshPoll = object : Runnable {
+        override fun run() {
+            if (petPrefs().getBoolean("dsh_link", true)) {
+                Thread({
+                    try {
+                        val c = (java.net.URL("http://127.0.0.1:8755/").openConnection()
+                            as java.net.HttpURLConnection)
+                        c.connectTimeout = 800
+                        c.readTimeout = 800
+                        val txt = c.inputStream.bufferedReader().readText()
+                        c.disconnect()
+                        val o = org.json.JSONObject(txt)
+                        val st = o.optString("state")
+                        val tx = o.optString("text")
+                        handler.post { applyDshState(st, tx) }
+                    } catch (_: Exception) {
+                    }
+                }, "dshpoll").start()
+            }
+            handler.postDelayed(this, 1500)
+        }
+    }
+
+    private fun applyDshState(st: String, text: String) {
+        if (st == dshState && text == dshStatus) return
+        dshState = st
+        dshStatus = text
+        when (st) {
+            "working", "thinking", "waiting" -> {
+                server?.sendThinking(true)
+                showStatus(text.ifBlank { "正在干活…" })
+            }
+            "done" -> {
+                server?.sendThinking(false)
+                hideStatus()
+                if (petPrefs().getBoolean("dsh_celebrate", true)) say("干完啦～ 主人辛苦啦！")
+            }
+            else -> {
+                server?.sendThinking(false)
+                hideStatus()
+            }
+        }
+    }
+
+    private val idleChat = object : Runnable {
+        override fun run() {
+            val p = petPrefs()
+            if (p.getBoolean("idle_chat", false)) {
+                val mins = p.getInt("idle_min", 15).coerceAtLeast(2)
+                val gap = (System.currentTimeMillis() - lastUserAt) / 60000
+                if (gap >= mins && System.currentTimeMillis() - lastIdleChatAt > 20 * 60000L) {
+                    lastIdleChatAt = System.currentTimeMillis()
+                    lastUserAt = System.currentTimeMillis()
+                    Thread({
+                        val line = brain.ask("（现在没人跟你说话，你自己待着。请主动跟主人说一句话，20字以内，符合你的人设）")
+                        handler.post { if (!line.isNullOrBlank()) say(line) }
+                    }, "idlechat").start()
+                }
+            }
+            handler.postDelayed(this, 60000)
+        }
+    }
+
+    private fun onTouched() {
+        lastUserAt = System.currentTimeMillis()
+        val now = System.currentTimeMillis()
+        if (now - touchWindowStart > 40000) {
+            touchWindowStart = now
+            touchCount = 0
+        }
+        touchCount++
+        val p = petPrefs()
+        p.edit().putInt("affinity", (p.getInt("affinity", 0) + 1).coerceAtMost(99999)).apply()
+        if (touchCount >= 4 && now - lastPatReplyAt > 180000) {
+            touchCount = 0
+            lastPatReplyAt = now
+            Thread({
+                val line = brain.ask("（主人刚摸了摸你的头。请用一句话回应，20字以内，语气亲近）")
+                handler.post { if (!line.isNullOrBlank()) say(line) }
+            }, "pat").start()
+        }
+    }
+
+    private val reminder = object : Runnable {
+        override fun run() {
+            val p = petPrefs()
+            val at = p.getLong("remind_at", 0L)
+            if (at > 0 && System.currentTimeMillis() >= at) {
+                val label = p.getString("remind_label", "时间到啦")
+                p.edit().putLong("remind_at", 0L).apply()
+                say(label + "～ 该歇歇啦！")
+            }
+            handler.postDelayed(this, 30000)
+        }
+    }
+
+    /* ================= P1 结束 ================= */
+
     private fun speakAloud(text: String) {
         if (text.isBlank()) return
         val p = getSharedPreferences("pet", Context.MODE_PRIVATE)
@@ -689,6 +856,7 @@ class PetService : Service() {
     private fun handleUserText(text: String) {
         if (text.isBlank()) return
         val srv = server ?: return
+        lastUserAt = System.currentTimeMillis()
         srv.log("用户说: " + text.take(80))
         srv.sendThinking(true)
         Thread({
@@ -964,6 +1132,8 @@ class PetService : Service() {
         voice = null
         try { input_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         input_ = null
+        try { status_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
+        status_ = null
         try { bubble_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         bubble_ = null
         try { chat_?.let { wm_?.removeView(it) } } catch (_: Exception) {}

@@ -103,6 +103,31 @@ class MainActivity : Activity() {
         val eBase = field(col, "接口地址（留空 = DeepSeek 官方）", "api_base", Brain.DEFAULT_BASE)
         val eKey = field(col, "API Key（sk- 开头，只存在手机本地）", "api_key", "sk-...", true)
         val eModel = field(col, "模型名（留空 = deepseek-chat）", "api_model", Brain.DEFAULT_MODEL)
+        val personas = listOf(
+            "女仆（默认）" to Brain.DEFAULT_PERSONA,
+            "傲娇" to "你是Q版鲸鱼娘「大肥鱼」，性格傲娇嘴硬：嘴上嫌弃主人、其实很在意，回话短、爱用「哼」「才不是」这种口癖，20字以内。",
+            "温柔姐姐" to "你是Q版鲸鱼娘「大肥鱼」，性格温柔体贴像姐姐：说话软软的、会关心主人累不累，回话短，25字以内。",
+            "毒舌吐槽" to "你是Q版鲸鱼娘「大肥鱼」，性格毒舌爱吐槽但没恶意：会调侃主人、偶尔损两句，回话短、有梗，25字以内。",
+            "自定义" to "")
+        val personaField = field(col, "人设（可编辑，选预设会自动填）", "persona", Brain.DEFAULT_PERSONA)
+        val sp = android.widget.Spinner(this)
+        sp.adapter = android.widget.ArrayAdapter(this,
+            android.R.layout.simple_spinner_dropdown_item, personas.map { it.first })
+        sp.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                val txt = personas[position].second
+                if (txt.isNotEmpty()) personaField.setText(txt)
+            }
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+        col.addView(card().apply {
+            addView(TextView(this@MainActivity).apply {
+                text = "人设一键切换"
+                textSize = 12f
+                setTextColor(0xFF6B74A8.toInt())
+            })
+            addView(sp)
+        })
 
         col.addView(card().apply {
             addView(pill("保存并重启桌宠", true) {
@@ -116,6 +141,7 @@ class MainActivity : Activity() {
                     .putString("api_base", base)
                     .putString("api_key", key)
                     .putString("api_model", eModel.text.toString().trim())
+                    .putString("persona", personaField.text.toString().trim())
                     .apply()
                 stopService(Intent(this@MainActivity, PetService::class.java))
                 startForegroundService(Intent(this@MainActivity, PetService::class.java))
@@ -169,7 +195,76 @@ class MainActivity : Activity() {
             addView(soundBox)
         })
 
-        col.addView(section("④ 怎么玩"))
+        // ── 陪伴 ──
+        col.addView(section("④ 陪伴"))
+        val swLink = CheckBox(this).apply {
+            text = "跟着 DSH 状态变脸（干活时冒问号、头顶显示当前任务）"
+            textSize = 14f
+            isChecked = prefs.getBoolean("dsh_link", true)
+            setTextColor(0xFF2A3876.toInt())
+        }
+        val swCelebrate = CheckBox(this).apply {
+            text = "一轮干完她庆祝一下"
+            textSize = 14f
+            isChecked = prefs.getBoolean("dsh_celebrate", true)
+            setTextColor(0xFF2A3876.toInt())
+        }
+        val swIdle = CheckBox(this).apply {
+            text = "她主动搭话（15 分钟没人理她）"
+            textSize = 14f
+            isChecked = prefs.getBoolean("idle_chat", false)
+            setTextColor(0xFF2A3876.toInt())
+        }
+        for (cb in listOf(swLink, swCelebrate, swIdle)) {
+            cb.setOnCheckedChangeListener { v, checked ->
+                when (v) {
+                    swLink -> prefs.edit().putBoolean("dsh_link", checked).apply()
+                    swCelebrate -> prefs.edit().putBoolean("dsh_celebrate", checked).apply()
+                    else -> prefs.edit().putBoolean("idle_chat", checked).apply()
+                }
+            }
+        }
+        val affLabel = TextView(this).apply {
+            text = "亲密度：" + prefs.getInt("affinity", 0) + "（聊天和摸头都会涨）"
+            textSize = 12f
+            setTextColor(0xFF6B74A8.toInt())
+        }
+        val remindLabel = TextView(this).apply {
+            textSize = 12f
+            setTextColor(0xFF6B74A8.toInt())
+            text = "番茄钟：未设置"
+        }
+        fun showRemind() {
+            val at = prefs.getLong("remind_at", 0L)
+            remindLabel.text = if (at > System.currentTimeMillis())
+                "番茄钟：还剩 " + ((at - System.currentTimeMillis()) / 60000 + 1) + " 分钟"
+            else "番茄钟：未设置"
+        }
+        showRemind()
+        col.addView(card().apply {
+            addView(swLink)
+            addView(swCelebrate)
+            addView(swIdle)
+            addView(affLabel)
+            addView(remindLabel)
+            for ((mins, label) in listOf(15 to "15 分钟", 25 to "25 分钟", 45 to "45 分钟")) {
+                addView(pill("提醒我 " + label, false) {
+                    prefs.edit()
+                        .putLong("remind_at", System.currentTimeMillis() + mins * 60000L)
+                        .putString("remind_label", label + "到啦")
+                        .apply()
+                    showRemind()
+                    toast("好的，" + label + "后叫你")
+                })
+            }
+            addView(pill("取消提醒", false) {
+                prefs.edit().putLong("remind_at", 0L).apply()
+                showRemind()
+                toast("已取消")
+            })
+        })
+
+        col.addView(section("⑤ 怎么玩"))
         col.addView(card().apply {
             addView(hint(
                 "• 悬浮钮：点「摸」= 跟她玩；点「用」= 触摸穿透，正常操作手机\n" +
