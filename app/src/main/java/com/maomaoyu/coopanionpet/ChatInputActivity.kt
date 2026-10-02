@@ -72,7 +72,7 @@ class ChatInputActivity : Activity() {
             setBackgroundColor(Color.TRANSPARENT)
             addView(row, FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         }
         setContentView(root)
 

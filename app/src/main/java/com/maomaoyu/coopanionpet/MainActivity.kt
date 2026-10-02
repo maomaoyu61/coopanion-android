@@ -50,15 +50,17 @@ class MainActivity : Activity() {
             })
         }
 
-        fun edit(key: String, hint: String, secret: Boolean = false) {
-            col.addView(EditText(this).apply {
+        fun edit(key: String, hint: String, secret: Boolean = false): EditText {
+            val e = EditText(this).apply {
                 this.hint = hint
                 setText(prefs.getString(key, ""))
                 textSize = 14f
                 if (secret) {
                     inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                 }
-            })
+            }
+            col.addView(e)
+            return e
         }
 
         col.addView(TextView(this).apply {
@@ -90,17 +92,14 @@ class MainActivity : Activity() {
         }
 
         label("聊天设置（默认 DeepSeek，任何 OpenAI 兼容接口都行）")
-        edit("api_base", Brain.DEFAULT_BASE)
-        edit("api_key", "sk-...（只存在手机本地，不会上传）", true)
-        edit("api_model", Brain.DEFAULT_MODEL)
+        val eBase = edit("api_base", Brain.DEFAULT_BASE)
+        val eKey = edit("api_key", "sk-...（只存在手机本地，不会上传）", true)
+        val eModel = edit("api_model", Brain.DEFAULT_MODEL)
         button("保存设置并重启桌宠") {
-            val base = col.getChildAt(col.childCount - 3)
-            val key = col.getChildAt(col.childCount - 2)
-            val model = col.getChildAt(col.childCount - 1)
             prefs.edit()
-                .putString("api_base", (base as EditText).text.toString().trim())
-                .putString("api_key", (key as EditText).text.toString().trim())
-                .putString("api_model", (model as EditText).text.toString().trim())
+                .putString("api_base", eBase.text.toString().trim())
+                .putString("api_key", eKey.text.toString().trim())
+                .putString("api_model", eModel.text.toString().trim())
                 .apply()
             stopService(Intent(this, PetService::class.java))
             startForegroundService(Intent(this, PetService::class.java))

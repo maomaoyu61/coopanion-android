@@ -254,7 +254,17 @@ class AssetServer(private val ctx: Context) {
                         "background-color:transparent!important;background-image:none!important}" +
                         "body.tab{background:transparent!important;background-image:none!important}" +
                         "body.tab .floor{display:none!important}</style>"
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + "</head>")
+                val hostJs = "<script>window.petHost=window.petHost||{" +
+                    "setInteractive:function(){}," +
+                    "focus:function(){}," +
+                    "grabFocus:function(){}," +
+                    "releaseFocus:function(){}," +
+                    "hide:function(){}," +
+                    "onCursor:function(){}," +
+                    "followCursor:function(){return Promise.resolve(null);}" +
+                    "};</script>"
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + hostJs + "</head>")
+                              else css + hostJs + html
                               else css + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }

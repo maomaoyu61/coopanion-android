@@ -56,6 +56,7 @@ class PetService : Service() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var ttsWarned = false
+    private var greeted = false
     private var inputWanted = false
     private var chat_: TextView? = null
     private var chatParams_: WindowManager.LayoutParams? = null
@@ -84,6 +85,7 @@ class PetService : Service() {
         }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+            server?.log("TTS 初始化 status=" + status + " (0=SUCCESS)")
             if (ttsReady) {
                 try { tts?.language = Locale.CHINESE } catch (_: Exception) {}
             }
@@ -113,13 +115,15 @@ class PetService : Service() {
             }
 
             override fun onPetHello() {
+                if (greeted) return
+                greeted = true
                 handler.postDelayed({
                     val srv = server ?: return@postDelayed
                     if (brain.configured()) {
-                        say("我在这儿～ 想聊点什么？", listOf("hop"))
+                        say("我在这儿～ 想聊点什么？")
                         srv.sendAsk("想聊什么呀？", listOf("随便聊聊", "夸夸我", "讲个冷笑话"), true)
                     } else {
-                        say("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。", listOf("nod"))
+                        say("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。")
                     }
                 }, 1600)
             }
@@ -227,7 +231,7 @@ class PetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     btnDownX = ev.rawX; btnDownY = ev.rawY
                     btnStartX = p.x; btnStartY = p.y; btnMoved = false
-                    v.postDelayed(longPress, 650)
+                    // 长按语音已停用（同上）
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -329,7 +333,7 @@ class PetService : Service() {
         p.y = statusBar
         try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
         raiseButtons()
-        if (on) say("我在这儿呢，你说～", listOf("look"))
+        if (on) say("我在这儿呢，你说～")
     }
 
     /** 页面要输入时临时让窗口可聚焦（键盘才能弹出来），输入结束再变回不抢焦点。 */
@@ -382,7 +386,7 @@ class PetService : Service() {
             handler.post({
                 server?.log("模型返回(" + cost + "ms): " + (reply ?: "null").take(100))
                 server?.sendThinking(false)
-                if (!reply.isNullOrBlank()) say(reply, listOf("nod")) else server?.log("回复为空，不发气泡")
+                if (!reply.isNullOrBlank()) say(reply) else server?.log("回复为空，不发气泡")
             })
         }, "brain").start()
     }
@@ -391,7 +395,7 @@ class PetService : Service() {
     private fun startVoice() {
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            say("先去 App 里给我麦克风权限吧～", listOf("nod"))
+            say("先去 App 里给我麦克风权限吧～")
             return
         }
         try {
@@ -400,7 +404,7 @@ class PetService : Service() {
             voice = sr
             sr.setRecognitionListener(object : android.speech.RecognitionListener {
                 override fun onReadyForSpeech(params: android.os.Bundle?) {
-                    say("我在听…", listOf("look"))
+                    say("我在听…")
                 }
 
                 override fun onBeginningOfSpeech() {}
@@ -412,7 +416,7 @@ class PetService : Service() {
 
                 override fun onError(error: Int) {
                     sr.destroy(); voice = null
-                    say("没听清～再长按我一下？", listOf("nod"))
+                    say("没听清～再长按我一下？")
                 }
 
                 override fun onResults(results: android.os.Bundle?) {
@@ -430,7 +434,7 @@ class PetService : Service() {
             }
             sr.startListening(i)
         } catch (e: Exception) {
-            say("语音没起来…（${e.javaClass.simpleName}）", listOf("nod"))
+            say("语音没起来…（${e.javaClass.simpleName}）")
         }
     }
 
@@ -449,24 +453,10 @@ class PetService : Service() {
             x = base.x + (base.width - size) / 2
             y = (base.y - size - (dm.density * 8).toInt()).coerceAtLeast(0)
         }
-        val mv = TextView(this).apply {
-            gravity = Gravity.CENTER
-            textSize = 17f
-            text = "\uD83C\uDFA4"
-            setTextColor(0xFFFFFFFF.toInt())
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xCC2C7BE5.toInt())
-            }
-            alpha = 0.9f
-            setOnClickListener {
-                server?.log("点了 🎤 语音")
-                startVoice()
-            }
-        }
-        try { wm.addView(mv, mp) } catch (_: Exception) {}
-        mic_ = mv
-        micParams_ = mp
+        // 🎤 按钮已去掉：安卓系统识别在你的手机上必然报错（日志里每次都是"没听清"），
+        // 语音改由 💬 输入条里输入法自带的麦克风负责。
+        mic_ = null
+        micParams_ = null
 
         val cs = (dm.density * 40).toInt()
         val cp = WindowManager.LayoutParams(
