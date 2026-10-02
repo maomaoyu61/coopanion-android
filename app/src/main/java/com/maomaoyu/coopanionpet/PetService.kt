@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.8 ===")
+        s.log("=== PetService 启动 v3.9 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -147,6 +147,7 @@ class PetService : Service() {
             override fun onPetHello() {
                 // 每次她上线都把保存的外观设置同步过去（否则启动前拖的滑块不会有反应）
                 server?.log("同步外观设置")
+                server?.hideHoverButtons()
                 server?.sendPrefs(
                     scale = getSharedPreferences("pet", Context.MODE_PRIVATE)
                         .getFloat("scale", 1f).toDouble(),
@@ -759,7 +760,7 @@ class PetService : Service() {
                     }
                 }, "dshpoll").start()
             }
-            handler.postDelayed(this, 1500)
+            handler.postDelayed(this, 1000)
         }
     }
 

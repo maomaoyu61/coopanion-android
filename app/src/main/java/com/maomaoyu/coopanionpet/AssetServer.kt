@@ -62,6 +62,11 @@ class AssetServer(private val ctx: Context) {
     /** 桌宠网页的 socket 还连着吗（省电暂停后可能已断开）。 */
     fun isPetConnected(): Boolean = petOut != null
 
+    /** 关掉她身上那两个网页悬浮图标（chat / voice）。 */
+    fun hideHoverButtons() {
+        sendJson("{\"t\":\"prefs\",\"hoverButtons\":[]}")
+    }
+
     private fun logText(): String = synchronized(logs) { logs.joinToString("\n") }
 
     /** 桌宠发来的事件（打字、摸它、上线…）交给上层处理。 */
@@ -308,8 +313,10 @@ class AssetServer(private val ctx: Context) {
                     "if(Math.abs(x-lx)>1||Math.abs(y-ly)>1){lx=x;ly=y;" +
                     "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
                     "requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>"
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + hostJs + posJs + "</head>")
-                              else css + noHalo + hostJs + posJs + html
+                val noHover = "<style>#tools{display:none !important;}</style>"
+
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + hostJs + posJs + "</head>")
+                              else css + noHalo + noHover + hostJs + posJs + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }
             val head = "HTTP/1.1 200 OK\r\nContent-Type: ${mimeOf(path)}\r\nContent-Length: ${data.size}\r\n" +
