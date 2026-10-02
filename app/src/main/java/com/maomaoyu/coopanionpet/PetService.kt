@@ -11,7 +11,9 @@ import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -48,6 +50,7 @@ class PetService : Service() {
     private var btn_: TextView? = null
     private var btnParams_: WindowManager.LayoutParams? = null
     private var btnMoved = false
+    private val handler = Handler(Looper.getMainLooper())
     private val brain by lazy { Brain(this) }
     private var voice: android.speech.SpeechRecognizer? = null
     private val longPress = Runnable { startVoice() }
