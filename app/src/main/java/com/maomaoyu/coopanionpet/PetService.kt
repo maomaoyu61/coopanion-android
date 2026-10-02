@@ -139,9 +139,10 @@ class PetService : Service() {
             return
         }
 
+        val fadeIn = web
         handler.postDelayed({
             try {
-                web_.animate().alpha(1f).setDuration(240).start()
+                fadeIn.animate().alpha(1f).setDuration(240).start()
             } catch (_: Exception) {
             }
         }, 900)
