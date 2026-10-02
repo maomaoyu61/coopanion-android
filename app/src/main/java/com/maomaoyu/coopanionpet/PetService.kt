@@ -48,6 +48,8 @@ class PetService : Service() {
     private var btn_: TextView? = null
     private var btnParams_: WindowManager.LayoutParams? = null
     private var btnMoved = false
+    private var btnCollapsed = false
+    private var btnSide = 1   // 0=左 1=右
     private var btnDownX = 0f
     private var btnDownY = 0f
     private var btnStartX = 0
@@ -132,7 +134,7 @@ class PetService : Service() {
         addToggleButton(wm)
     }
 
-    /** 悬浮小按钮：点一下在「操作手机」和「摸桌宠」之间切换；可拖到任意位置。 */
+    /** 悬浮小按钮：点一下切换「操作手机 / 摸桌宠」；拖到屏幕左右边缘会自动藏成一条透明小竖条。 */
     private fun addToggleButton(wm: WindowManager) {
         val prefs = getSharedPreferences("pet", Context.MODE_PRIVATE)
         val dm = resources.displayMetrics
@@ -140,6 +142,7 @@ class PetService : Service() {
         val screenW = dm.widthPixels
         val screenH = dm.heightPixels
         val size = (density * 46).toInt()
+        btnSide = prefs.getInt("btn_side", 1)
         val p = WindowManager.LayoutParams(
             size, size,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -156,12 +159,10 @@ class PetService : Service() {
             gravity = Gravity.CENTER
             textSize = 20f
             setTextColor(0xFFFFFFFF.toInt())
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(if (passthrough) 0xCC666666.toInt() else 0xCC1FA463.toInt())
-            }
-            text = if (passthrough) "🖐" else "🐾"
+            background = GradientDrawable()
+            text = if (passthrough) "\uD83D\uDD90" else "\uD83D\uDC3E"
         }
+        paintButton(tv, passthrough)
         tv.setOnTouchListener { v, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -172,17 +173,30 @@ class PetService : Service() {
                 MotionEvent.ACTION_MOVE -> {
                     if (abs(ev.rawX - btnDownX) > slop || abs(ev.rawY - btnDownY) > slop) btnMoved = true
                     if (btnMoved) {
-                        p.x = btnStartX + (ev.rawX - btnDownX).toInt()
-                        p.y = btnStartY + (ev.rawY - btnDownY).toInt()
+                        if (btnCollapsed) {
+                            p.y = (btnStartY + (ev.rawY - btnDownY)).toInt()
+                                .coerceIn(0, screenH - p.height)
+                        } else {
+                            p.x = (btnStartX + (ev.rawX - btnDownX)).toInt()
+                                .coerceIn(0, screenW - p.width)
+                            p.y = (btnStartY + (ev.rawY - btnDownY)).toInt()
+                                .coerceIn(0, screenH - p.height)
+                        }
                         try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
                     }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    if (btnMoved) {
-                        prefs.edit().putInt("btn_x", p.x).putInt("btn_y", p.y).apply()
+                    if (!btnMoved) {
+                        if (btnCollapsed) expandButton() else togglePassthrough()
                     } else {
-                        togglePassthrough()
+                        // 拖到左右边缘附近 → 自动收起成小竖条
+                        val cx = p.x + p.width / 2f
+                        if (cx < screenW * 0.06f || cx > screenW * 0.94f) {
+                            btnSide = if (cx < screenW / 2f) 0 else 1
+                            collapseButton()
+                        }
+                        saveButtonPos(prefs)
                     }
                     true
                 }
@@ -192,6 +206,63 @@ class PetService : Service() {
         try { wm.addView(tv, p) } catch (_: Exception) {}
         btn_ = tv
         btnParams_ = p
+        if (prefs.getBoolean("btn_collapsed", false)) collapseButton()
+    }
+
+    private fun paintButton(v: TextView, gray: Boolean) {
+        val color = if (gray) 0xCC666666.toInt() else 0xCC1FA463.toInt()
+        val bg = GradientDrawable().apply {
+            shape = if (btnCollapsed) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
+            cornerRadius = if (btnCollapsed) (resources.displayMetrics.density * 4) else 0f
+            setColor(color)
+        }
+        v.background = bg
+        v.text = if (btnCollapsed) "" else if (gray) "\uD83D\uDD90" else "\uD83D\uDC3E"
+        v.alpha = if (btnCollapsed) 0.35f else 1f
+        v.setTextColor(0xFFFFFFFF.toInt())
+    }
+
+    private fun saveButtonPos(prefs: android.content.SharedPreferences) {
+        val p = btnParams_ ?: return
+        prefs.edit()
+            .putInt("btn_x", p.x).putInt("btn_y", p.y)
+            .putInt("btn_side", btnSide)
+            .putBoolean("btn_collapsed", btnCollapsed).apply()
+    }
+
+    /** 收起成贴着屏幕边缘的透明小竖条 */
+    private fun collapseButton() {
+        val wm = wm_ ?: return
+        val v = btn_ ?: return
+        val p = btnParams_ ?: return
+        val dm = resources.displayMetrics
+        btnCollapsed = true
+        val barW = (dm.density * 7).toInt()
+        val barH = (dm.density * 64).toInt()
+        p.width = barW
+        p.height = barH
+        p.x = if (btnSide == 0) 0 else dm.widthPixels - barW
+        p.y = p.y.coerceIn(0, dm.heightPixels - barH)
+        paintButton(v, passthrough)
+        try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+        saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
+    }
+
+    /** 从小竖条弹回完整按钮 */
+    private fun expandButton() {
+        val wm = wm_ ?: return
+        val v = btn_ ?: return
+        val p = btnParams_ ?: return
+        val dm = resources.displayMetrics
+        btnCollapsed = false
+        val size = (dm.density * 46).toInt()
+        p.width = size
+        p.height = size
+        p.x = if (btnSide == 0) (dm.density * 6).toInt() else dm.widthPixels - size - (dm.density * 6).toInt()
+        p.y = p.y.coerceIn(0, dm.heightPixels - size)
+        paintButton(v, passthrough)
+        try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+        saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
     }
 
     /** 把按钮提到最上层（主窗口变可点后可能压住它）。 */
@@ -218,11 +289,7 @@ class PetService : Service() {
             wm_?.updateViewLayout(root_, p)
         } catch (_: Exception) {
         }
-        btn_?.let { b ->
-            b.text = if (passthrough) "🖐" else "🐾"
-            (b.background as? GradientDrawable)?.setColor(
-                if (passthrough) 0xCC666666.toInt() else 0xCC1FA463.toInt())
-        }
+        btn_?.let { b -> paintButton(b, passthrough) }
         bringButtonToFront()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_ID, buildNotification())
