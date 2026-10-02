@@ -90,7 +90,6 @@ class PetService : Service() {
         } else {
             startForeground(NOTIF_ID, buildNotification())
         }
-        handler.postDelayed(petTrack, 1200)
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             server?.log("TTS 初始化 status=" + status + " (0=SUCCESS)")
@@ -194,6 +193,7 @@ class PetService : Service() {
                 }
             }
         }
+        web.addJavascriptInterface(JsBridge(), "AndroidPet")
         web.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
         web_ = web
 
@@ -463,44 +463,36 @@ class PetService : Service() {
     /**
      * 让气泡跟着桌宠走：周期性问页面 #pet 的包围盒，把气泡摆到她头顶上方。
      */
-    private val petTrack = object : Runnable {
-        override fun run() {
-            val w = web_
-            if (w != null && bubble_?.visibility == android.view.View.VISIBLE) {
-                try {
-                    w.evaluateJavascript(
-                        "(function(){var e=document.querySelector('#pet');" +
-                        "if(!e)return '';var r=e.getBoundingClientRect();" +
-                        "return Math.round(r.left)+','+Math.round(r.top)+','+" +
-                        "Math.round(r.width)+','+Math.round(r.height);})()"
-                    ) { res ->
-                        val s = (res ?: "").trim('"')
-                        val a = s.split(",")
-                        val b = bubble_
-                        val p = bubbleParams_
-                        val wm = wm_
-                        if (a.size == 4 && b != null && p != null && wm != null) {
-                            try {
-                                val dens = resources.displayMetrics.density
-                                val px = a[0].toFloat() * dens
-                                val py = a[1].toFloat() * dens
-                                val pw = a[2].toFloat() * dens
-                                val sw = resources.displayMetrics.widthPixels
-                                val bh = if (b.height > 0) b.height else (dens * 64).toInt()
-                                val bx = px.toInt() + pw.toInt() / 2 - p.width / 2
-                                p.x = bx.coerceIn(0, (sw - p.width).coerceAtLeast(0))
-                                val by = py.toInt() - bh - (dens * 10f).toInt()
-                                p.y = by.coerceAtLeast(0)
-                                wm.updateViewLayout(b, p)
-                            } catch (_: Exception) {
-                            }
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-            }
-            handler.postDelayed(this, 350)
+    /** 网页主动推来的桌宠位置（CSS 像素）→ 让气泡跟着她；只在真的移动时才挪窗口，避免掉帧。 */
+    private inner class JsBridge {
+        @android.webkit.JavascriptInterface
+        fun pos(x: Int, y: Int, w: Int, h: Int) {
+            handler.post { followPet(x, y, w, h) }
         }
+    }
+
+    private var lastBx = Int.MIN_VALUE
+    private var lastBy = Int.MIN_VALUE
+
+    private fun followPet(cx: Int, cy: Int, cw: Int, ch: Int) {
+        val wm = wm_ ?: return
+        val b = bubble_ ?: return
+        val p = bubbleParams_ ?: return
+        if (b.visibility != android.view.View.VISIBLE) return
+        val dens = resources.displayMetrics.density
+        val px = (cx * dens).toInt()
+        val py = (cy * dens).toInt()
+        val pw = (cw * dens).toInt()
+        val sw = resources.displayMetrics.widthPixels
+        val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
+        val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
+        val by = (py - bh - (dens * 10f).toInt()).coerceAtLeast(0)
+        if (Math.abs(bx - lastBx) < 2 && Math.abs(by - lastBy) < 2) return
+        lastBx = bx
+        lastBy = by
+        p.x = bx
+        p.y = by
+        try { wm.updateViewLayout(b, p) } catch (_: Exception) {}
     }
 
     /** 把气泡重新提到最上层（全屏桌宠窗口被 updateViewLayout 时会压住它）。 */

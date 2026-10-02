@@ -264,8 +264,17 @@ class AssetServer(private val ctx: Context) {
                     "followCursor:function(){return Promise.resolve(null);}," +
                     "sampleBackdrop:function(){return new Array(300).fill(255);}" +
                     "};</script>"
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + hostJs + "</head>")
-                              else css + hostJs + html
+                val posJs = "<script>(function(){var last=0,lx=-1,ly=-1;" +
+                    "function tick(ts){if(ts-last>100){last=ts;" +
+                    "var e=document.querySelector(\"#pet\");" +
+                    "if(e\u0026\u0026window.AndroidPet\u0026\u0026window.AndroidPet.pos){" +
+                    "var r=e.getBoundingClientRect();" +
+                    "var x=Math.round(r.left),y=Math.round(r.top),w=Math.round(r.width),h=Math.round(r.height);" +
+                    "if(Math.abs(x-lx)>1||Math.abs(y-ly)>1){lx=x;ly=y;" +
+                    "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
+                    "requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>"
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + hostJs + posJs + "</head>")
+                              else css + hostJs + posJs + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }
             val head = "HTTP/1.1 200 OK\r\nContent-Type: ${mimeOf(path)}\r\nContent-Length: ${data.size}\r\n" +
