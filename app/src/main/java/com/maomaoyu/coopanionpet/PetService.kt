@@ -56,6 +56,9 @@ class PetService : Service() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var ttsWarned = false
+    private var inputWanted = false
+    private var mic_: TextView? = null
+    private var micParams_: WindowManager.LayoutParams? = null
     private val brain by lazy { Brain(this) }
     private var voice: android.speech.SpeechRecognizer? = null
     private val longPress = Runnable { startVoice() }
@@ -240,6 +243,7 @@ class PetService : Service() {
                                 .coerceIn(0, screenH - p.height)
                         }
                         try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+                        syncMic()
                     }
                     true
                 }
@@ -264,7 +268,43 @@ class PetService : Service() {
         try { wm.addView(tv, p) } catch (_: Exception) {}
         btn_ = tv
         btnParams_ = p
+        addMicButton(wm, p)
         if (prefs.getBoolean("btn_collapsed", false)) collapseButton()
+    }
+
+    /**
+     * 盯着页面里有没有输入框获得焦点 —— 有就把窗口临时变成可聚焦并主动唤起键盘，
+     * 没有就变回"不抢焦点"。之前指望系统来要 InputConnection 是错的：
+     * 窗口不可聚焦时，系统压根不会来要，回调永远不会触发。
+     */
+    private val imeWatch = object : Runnable {
+        override fun run() {
+            val w = web_
+            if (w != null) {
+                try {
+                    w.evaluateJavascript(
+                        "(function(){var e=document.activeElement;" +
+                        "return (e&&(e.tagName===INPUT||e.tagName===TEXTAREA||e.isContentEditable))?1:0;})()"
+                    ) { r ->
+                        val wants = r != null && r.contains("1")
+                        if (wants != inputWanted) {
+                            inputWanted = wants
+                            setWindowFocusable(wants)
+                            if (wants) {
+                                try {
+                                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                                    w.requestFocus()
+                                    imm.showSoftInput(w, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                }
+            }
+            handler.postDelayed(this, 350)
+        }
     }
 
     /** 页面要输入时临时让窗口可聚焦（键盘才能弹出来），输入结束再变回不抢焦点。 */
@@ -359,6 +399,52 @@ class PetService : Service() {
         }
     }
 
+    /** 桌宠圆形按钮上面那个 🎤，点一下就开始语音说话。 */
+    private fun addMicButton(wm: WindowManager, base: WindowManager.LayoutParams) {
+        val dm = resources.displayMetrics
+        val size = (dm.density * 40).toInt()
+        val mp = WindowManager.LayoutParams(
+            size, size,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = base.x + (base.width - size) / 2
+            y = (base.y - size - (dm.density * 8).toInt()).coerceAtLeast(0)
+        }
+        val mv = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 17f
+            text = "\uD83C\uDFA4"
+            setTextColor(0xFFFFFFFF.toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xCC2C7BE5.toInt())
+            }
+            alpha = 0.9f
+            setOnClickListener { startVoice() }
+        }
+        try { wm.addView(mv, mp) } catch (_: Exception) {}
+        mic_ = mv
+        micParams_ = mp
+    }
+
+    /** 让 🎤 跟着圆按钮走（收起时一起隐藏）。 */
+    private fun syncMic() {
+        val wm = wm_ ?: return
+        val mv = mic_ ?: return
+        val mp = micParams_ ?: return
+        val p = btnParams_ ?: return
+        val dm = resources.displayMetrics
+        val size = mp.width
+        mp.x = p.x + (p.width - size) / 2
+        mp.y = (p.y - size - (dm.density * 8).toInt()).coerceAtLeast(0)
+        mv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
+        try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
+    }
+
     private fun paintButton(v: TextView, gray: Boolean) {
         val color = if (gray) 0xCC666666.toInt() else 0xCC1FA463.toInt()
         val bg = GradientDrawable().apply {
@@ -395,6 +481,7 @@ class PetService : Service() {
         p.y = p.y.coerceIn(0, dm.heightPixels - barH)
         paintButton(v, passthrough)
         try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
+        syncMic()
         saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))
     }
 
@@ -422,6 +509,7 @@ class PetService : Service() {
         val p = btnParams_ ?: return
         try { wm.removeView(v) } catch (_: Exception) {}
         try { wm.addView(v, p) } catch (_: Exception) {}
+        try { mic_?.let { m -> wm.removeView(m); wm.addView(m, micParams_) } } catch (_: Exception) {}
     }
 
     private var root_: FrameLayout? = null
@@ -494,6 +582,8 @@ class PetService : Service() {
         tts = null
         try { voice?.destroy() } catch (_: Exception) {}
         voice = null
+        try { mic_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
+        mic_ = null
         try { btn_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         btn_ = null
         web_?.destroy()
