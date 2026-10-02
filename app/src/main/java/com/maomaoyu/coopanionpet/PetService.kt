@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.9 ===")
+        s.log("=== PetService 启动 v3.10 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -252,6 +252,7 @@ class PetService : Service() {
         }
         if (!loopsStarted) {
             loopsStarted = true
+            handler.postDelayed(linkWatch, 8000)
             handler.postDelayed(dshPoll, 2500)
             handler.postDelayed(idleChat, 90000)
             handler.postDelayed(reminder, 30000)
@@ -690,6 +691,9 @@ class PetService : Service() {
     private var touchWindowStart = 0L
     private var lastPatReplyAt = 0L
     private var loopsStarted = false
+    private var linkWatchOn = false
+    private var deadStreak = 0
+    private var lastReloadAt = 0L
     private var lastNotifyApp = ""
     private var lastNotifyAt = 0L
 
@@ -835,6 +839,29 @@ class PetService : Service() {
                 say(label + "～ 该歇歇啦！")
             }
             handler.postDelayed(this, 30000)
+        }
+    }
+
+    /* ================= 连线自愈：桌宠网页断线就重载 ================= */
+
+    /** 每 8 秒看一眼桌宠 socket；连续两次（约 16 秒）断着就重载网页，最多 20 秒重载一次。 */
+    private val linkWatch = object : Runnable {
+        override fun run() {
+            val s = server
+            if (s != null) {
+                if (s.isPetConnected()) {
+                    deadStreak = 0
+                } else {
+                    deadStreak++
+                    if (deadStreak >= 2 && System.currentTimeMillis() - lastReloadAt > 20000) {
+                        lastReloadAt = System.currentTimeMillis()
+                        deadStreak = 0
+                        s.log("桌宠 socket 断线超过 16 秒 → 自动重载网页")
+                        reloadPet()
+                    }
+                }
+            }
+            handler.postDelayed(this, 8000)
         }
     }
 
