@@ -257,6 +257,12 @@ class MainActivity : Activity() {
 
         // ── 陪伴 ──
         col.addView(section("④ 陪伴"))
+        val dshStateLabel = TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFF4759AD.toInt())
+            text = "DSH 播报器：检查中…"
+        }
+        this.dshStateLabel = dshStateLabel
         val swLink = CheckBox(this).apply {
             text = "跟着 DSH 状态变脸（干活时冒问号、头顶显示当前任务）"
             textSize = 14f
@@ -327,6 +333,8 @@ class MainActivity : Activity() {
                     toast("这台手机没有这个设置页")
                 }
             })
+            addView(dshStateLabel)
+            addView(pill("重新检测 DSH 连接", false) { refreshDsh() })
             addView(affLabel)
             addView(remindLabel)
             for ((mins, label) in listOf(15 to "15 分钟", 25 to "25 分钟", 45 to "45 分钟")) {
@@ -491,6 +499,38 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             toast("剪贴板里没有可用的配置")
         }
+    }
+
+    /** 探测 DSH 状态播报器是否在跑（它决定她能不能跟着我干活变脸）。 */
+    private fun refreshDsh() {
+        val label = dshStateLabel ?: return
+        label.text = "DSH 播报器：检查中…"
+        Thread({
+            val msg = try {
+                val c = (java.net.URL("http://127.0.0.1:8755/").openConnection()
+                    as java.net.HttpURLConnection)
+                c.connectTimeout = 900
+                c.readTimeout = 900
+                val txt = c.inputStream.bufferedReader().readText()
+                c.disconnect()
+                val o = org.json.JSONObject(txt)
+                when (o.optString("state")) {
+                    "idle" -> "DSH 播报器：已连接 ✓（我闲着）"
+                    "done" -> "DSH 播报器：已连接 ✓（刚干完一轮）"
+                    else -> "DSH 播报器：已连接 ✓（" + o.optString("text") + "）"
+                }
+            } catch (e: Exception) {
+                "DSH 播报器：未连接 ✗（在 DSH 里执行 sh /sdcard/dsh/pet-state-start.sh）"
+            }
+            runOnUiThread { label.text = msg }
+        }, "dshprobe").start()
+    }
+
+    private var dshStateLabel: TextView? = null
+
+    override fun onResume() {
+        super.onResume()
+        dshStateLabel?.let { refreshDsh() }
     }
 
     private fun toast(msg: String) {
