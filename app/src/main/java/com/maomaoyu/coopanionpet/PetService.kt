@@ -487,7 +487,8 @@ class PetService : Service() {
                                 val pw = a[2].toFloat() * dens
                                 val sw = resources.displayMetrics.widthPixels
                                 val bh = if (b.height > 0) b.height else (dens * 64).toInt()
-                                p.x = (px + pw / 2f - p.width / 2f).toInt().coerceIn(0, (sw - p.width).coerceAtLeast(0))
+                                val bx = (px + pw / 2f - p.width / 2f).toInt()
+                                p.x = bx.coerceIn(0, (sw - p.width).coerceAtLeast(0))
                                 p.y = (py - bh - (dens * 10).toInt()).coerceAtLeast(0)
                                 wm.updateViewLayout(b, p)
                             } catch (_: Exception) {
@@ -806,10 +807,10 @@ class PetService : Service() {
         btnCollapsed = true
         p.width = (dm.density * 14).toInt()
         p.height = (dm.density * 56).toInt()
-        if (btnSide == "left") p.x = 0 else p.x = dm.widthPixels - p.width
+        if (btnSide == 0) p.x = 0 else p.x = dm.widthPixels - p.width
         v.text = ""
         v.textSize = 13f
-        v.text = if (btnSide == "left") "\u203A" else "\u2039"
+        v.text = if (btnSide == 0) "\u203A" else "\u2039"
         v.alpha = 0.75f
         v.background = GradientDrawable().apply {
             cornerRadius = dm.density * 7
