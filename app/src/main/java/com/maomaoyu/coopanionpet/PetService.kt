@@ -427,18 +427,16 @@ class PetService : Service() {
     /** 原生气泡：回复直接画在屏幕上（网页那套气泡在安卓上不可靠）。 */
     private fun addNativeBubble(wm: WindowManager, dm: android.util.DisplayMetrics) {
         val v = TextView(this).apply {
-            textSize = 15f
-            setTextColor(0xFFFFFFFF.toInt())
-            setPadding((dm.density * 14).toInt(), (dm.density * 10).toInt(),
-                (dm.density * 14).toInt(), (dm.density * 10).toInt())
-            background = GradientDrawable().apply {
-                cornerRadius = dm.density * 18
-                setColor(0xF51B2233.toInt())
-                setStroke((dm.density * 1.5f).toInt(), 0x66FFFFFF.toInt())
-            }
-            elevation = dm.density * 8
+            textSize = 14.5f
+            setTextColor(0xFF18203A.toInt())
+            setLineSpacing(dm.density * 3, 1f)
+            setPadding((dm.density * 15).toInt(), (dm.density * 11).toInt(),
+                (dm.density * 15).toInt(), (dm.density * 20).toInt())
+            background = BubbleBg()
+            elevation = dm.density * 6
             visibility = android.view.View.GONE
-            maxLines = 6
+            maxLines = 3
+            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         val p = WindowManager.LayoutParams(
             (dm.widthPixels * 0.78f).toInt(),
@@ -463,6 +461,40 @@ class PetService : Service() {
     /**
      * 让气泡跟着桌宠走：周期性问页面 #pet 的包围盒，把气泡摆到她头顶上方。
      */
+    /** 浅色圆角气泡 + 下方居中小尾巴。 */
+    private inner class BubbleBg : android.graphics.drawable.Drawable() {
+        private val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFFFFFFF.toInt()
+            style = android.graphics.Paint.Style.FILL
+        }
+        private val line = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = 0xFFBFD2F7.toInt()
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = resources.displayMetrics.density * 1.6f
+        }
+        override fun draw(c: android.graphics.Canvas) {
+            val dd = resources.displayMetrics.density
+            val r = dd * 16
+            val tail = dd * 9
+            val b = bounds
+            val rect = android.graphics.RectF(b.left.toFloat() + dd, b.top.toFloat() + dd,
+                b.right.toFloat() - dd, b.bottom.toFloat() - tail)
+            val path = android.graphics.Path()
+            path.addRoundRect(rect, r, r, android.graphics.Path.Direction.CW)
+            val cx = b.exactCenterX()
+            path.moveTo(cx - tail, rect.bottom - dd)
+            path.lineTo(cx, b.bottom.toFloat() - dd)
+            path.lineTo(cx + tail, rect.bottom - dd)
+            path.close()
+            c.drawPath(path, fill)
+            c.drawPath(path, line)
+        }
+        override fun setAlpha(a: Int) {}
+        override fun setColorFilter(cf: android.graphics.ColorFilter?) {}
+        @Deprecated("Deprecated in Java")
+        override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+    }
+
     /** 网页主动推来的桌宠位置（CSS 像素）→ 让气泡跟着她；只在真的移动时才挪窗口，避免掉帧。 */
     private inner class JsBridge {
         @android.webkit.JavascriptInterface
@@ -684,10 +716,11 @@ class PetService : Service() {
             text = "\uD83D\uDCAC"
             setTextColor(0xFFFFFFFF.toInt())
             background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0xCC8E44AD.toInt())
+                cornerRadius = resources.displayMetrics.density * 15
+                setColor(0xFFFFFFFF.toInt())
+                setStroke((resources.displayMetrics.density * 1.8f).toInt(), 0xFFBFD2F7.toInt())
             }
-            alpha = 0.9f
+            alpha = 1f
             val slop2 = ViewConfiguration.get(this@PetService).scaledTouchSlop
             var mdX = 0f; var mdY = 0f; var moved2 = false
             setOnTouchListener { v2, ev2 ->
@@ -771,16 +804,24 @@ class PetService : Service() {
     }
 
     private fun paintButton(v: TextView, gray: Boolean) {
-        val color = if (gray) 0xCC666666.toInt() else 0xCC1FA463.toInt()
-        val bg = GradientDrawable().apply {
-            shape = if (btnCollapsed) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
-            cornerRadius = if (btnCollapsed) (resources.displayMetrics.density * 4) else 0f
-            setColor(color)
+        val dm = resources.displayMetrics
+        if (btnCollapsed) {
+            v.background = GradientDrawable().apply {
+                cornerRadius = dm.density * 7
+                setColor(0xB32C5FD8.toInt())
+            }
+            v.text = ""
+            v.alpha = 0.8f
+            return
         }
-        v.background = bg
-        v.text = if (btnCollapsed) "" else if (gray) "\uD83D\uDD90" else "\uD83D\uDC3E"
-        v.alpha = if (btnCollapsed) 0.35f else 1f
-        v.setTextColor(0xFFFFFFFF.toInt())
+        v.background = GradientDrawable().apply {
+            cornerRadius = dm.density * 15
+            setColor(0xFFFFFFFF.toInt())
+            setStroke((dm.density * 1.8f).toInt(),
+                if (gray) 0xFFC7CEDA.toInt() else 0xFFBFD2F7.toInt())
+        }
+        v.text = if (gray) "\uD83D\uDD90" else "\uD83D\uDC3E"
+        v.alpha = 1f
     }
 
     private fun saveButtonPos(prefs: android.content.SharedPreferences) {

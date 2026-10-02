@@ -44,11 +44,35 @@ class MainActivity : Activity() {
 
         // ── 标题卡 ──
         col.addView(card(0xFF1B2233.toInt(), 20f, true).apply {
-            addView(TextView(this@MainActivity).apply {
-                text = "\uD83D\uDC33  Coopanion 桌宠"
-                textSize = 21f
-                setTextColor(Color.WHITE)
+            addView(LinearLayout(this@MainActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                addView(android.widget.ImageView(this@MainActivity).apply {
+                    setImageResource(R.drawable.ic_launcher_fg)
+                    scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    background = GradientDrawable().apply {
+                        cornerRadius = d * 12
+                        setColor(0xFFFFFFFF.toInt())
+                    }
+                    layoutParams = LinearLayout.LayoutParams((d * 46).toInt(), (d * 46).toInt())
+                        .apply { rightMargin = (d * 12).toInt() }
+                })
+                addView(LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(TextView(this@MainActivity).apply {
+                        text = "Coopanion 桌宠"
+                        textSize = 20f
+                        setTextColor(Color.WHITE)
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        text = "安卓外壳 · 形象/动作/配色来自上游"
+                        textSize = 12f
+                        setTextColor(0xFF9FB3D9.toInt())
+                        setPadding(0, (d * 4).toInt(), 0, 0)
+                    })
+                })
             })
+        })
             addView(TextView(this@MainActivity).apply {
                 text = "安卓外壳 · 形象/动作/配色都来自上游 Coopanion"
                 textSize = 12f
