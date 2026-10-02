@@ -129,7 +129,6 @@ class PetService : Service() {
                     val srv = server ?: return@postDelayed
                     if (brain.configured()) {
                         say("我在这儿～ 想聊点什么？")
-                        srv.sendAsk("想聊什么呀？", listOf("随便聊聊", "夸夸我", "讲个冷笑话"), true)
                     } else {
                         say("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。")
                     }
@@ -463,7 +462,7 @@ class PetService : Service() {
     private inner class PetRoot(ctx: Context) : FrameLayout(ctx) {
         private val gd = android.view.GestureDetector(ctx,
             object : android.view.GestureDetector.SimpleOnGestureListener() {
-                override fun onDoubleTap(e: android.view.MotionEvent?): Boolean {
+                override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
                     server?.log("双击桌宠 → 打开对话框")
                     showChatInput()
                     return true
