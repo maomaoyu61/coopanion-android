@@ -262,6 +262,7 @@ class MainActivity : Activity() {
             setTextColor(0xFF4759AD.toInt())
             text = "桌宠连线：未知"
         }
+        this.petAliveLabel = petAliveLabel
         val dshStateLabel = TextView(this).apply {
             textSize = 13f
             setTextColor(0xFF4759AD.toInt())
@@ -530,13 +531,15 @@ class MainActivity : Activity() {
             }
             runOnUiThread { label.text = msg }
             runOnUiThread {
-                petAliveLabel.text = if (PetService.instance?.isPetAlive() == true)
-                    "桌宠连线：✓ 正常" else "桌宠连线：✗ 已断开（桌宠会自动重载，若一直断开请重启桌宠）"
+                petAliveLabel?.text = if (PetService.instance?.isPetAlive() == true)
+                    "桌宠连线：✓ 正常"
+                else "桌宠连线：✗ 已断开（会自动重载；若一直断开请重启桌宠）"
             }
         }, "dshprobe").start()
     }
 
     private var dshStateLabel: TextView? = null
+    private var petAliveLabel: TextView? = null
 
     override fun onResume() {
         super.onResume()
