@@ -241,6 +241,14 @@ class PetService : Service() {
         }
         addNativeBubble(wm, dm)
         addStatusBar(wm, dm)
+        try {
+            val f = android.content.IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            }
+            registerReceiver(screenRx, f)
+        } catch (_: Exception) {
+        }
         if (!loopsStarted) {
             loopsStarted = true
             handler.postDelayed(dshPoll, 2500)
@@ -815,6 +823,33 @@ class PetService : Service() {
         }
     }
 
+    /* ================= P2：省电 / 试听 / 重载 ================= */
+
+    /** 省电：息屏时暂停网页渲染，亮屏恢复。 */
+    private val screenRx = object : android.content.BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            if (!petPrefs().getBoolean("power_save", true)) return
+            when (i?.action) {
+                Intent.ACTION_SCREEN_OFF -> try { web_?.onPause() } catch (_: Exception) {}
+                Intent.ACTION_SCREEN_ON -> try { web_?.onResume() } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /** 试听语音（App 里调语速/音高时用）。 */
+    fun testSpeak() {
+        say("我是大肥鱼，这样说话听得清吗？")
+    }
+
+    /** 重载桌宠网页（切换形象/配色后调用，网页会带着新配置重连）。 */
+    fun reloadPet() {
+        handler.post {
+            try { web_?.reload() } catch (_: Exception) {}
+        }
+    }
+
+    /* ================= P2 结束 ================= */
+
     /* ================= P1 结束 ================= */
 
     private fun speakAloud(text: String) {
@@ -1132,6 +1167,7 @@ class PetService : Service() {
         voice = null
         try { input_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         input_ = null
+        try { unregisterReceiver(screenRx) } catch (_: Exception) {}
         try { status_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         status_ = null
         try { bubble_?.let { wm_?.removeView(it) } } catch (_: Exception) {}

@@ -50,9 +50,25 @@ class Brain(private val ctx: Context) {
         val model = prefs.getString("api_model", "").orEmpty().trim().ifEmpty { DEFAULT_MODEL }
         val persona = prefs.getString("persona", DEFAULT_PERSONA).orEmpty()
 
+        // 养成：亲密度 + 心情（按小时自然衰减），影响她的语气
+        val aff = prefs.getInt("affinity", 0)
+        val moodRaw = prefs.getInt("mood", 70)
+        val moodAt = prefs.getLong("mood_at", System.currentTimeMillis())
+        val decay = (((System.currentTimeMillis() - moodAt) / 3600000L) * 3L).toInt()
+        val mood = (moodRaw - decay).coerceIn(5, 100)
+        val moodDesc = when {
+            mood >= 85 -> "心情特别好，很黏主人"
+            mood >= 60 -> "心情不错"
+            mood >= 35 -> "有点无聊，想被理一理"
+            else -> "有点低落，想被安慰"
+        }
+
         val hist = history()
         val messages = JSONArray()
         messages.put(JSONObject().put("role", "system").put("content", persona))
+        messages.put(JSONObject().put("role", "system").put("content",
+            "（当前状态：亲密度 " + aff + "，心情 " + mood + "/100 —— " + moodDesc +
+            "。回复时自然体现出来，不要直接报数字。）"))
         val from = maxOf(0, hist.length() - 12)
         for (i in from until hist.length()) messages.put(hist.get(i))
         messages.put(JSONObject().put("role", "user").put("content", userText))
@@ -89,7 +105,12 @@ class Brain(private val ctx: Context) {
 
             hist.put(JSONObject().put("role", "user").put("content", userText))
             hist.put(JSONObject().put("role", "assistant").put("content", reply))
-            prefs.edit().putString("chat_history", hist.toString()).apply()
+            prefs.edit()
+                .putString("chat_history", hist.toString())
+                .putInt("affinity", aff + 1)
+                .putInt("mood", (mood + 2).coerceAtMost(100))
+                .putLong("mood_at", System.currentTimeMillis())
+                .apply()
             reply
         } catch (e: Exception) {
             "我这边网络好像不太顺…（${e.javaClass.simpleName}）"

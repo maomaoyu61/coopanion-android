@@ -39,6 +39,11 @@
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize|stateVisible" />
 
+        <activity
+            android:name=".HistoryActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar" />
+
         <service
             android:name=".PetService"
             android:exported="false"

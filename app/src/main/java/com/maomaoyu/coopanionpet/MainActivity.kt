@@ -189,10 +189,45 @@ class MainActivity : Activity() {
             prefs.edit().putBoolean("sound", checked).apply()
             PetService.instance?.applySound(checked)
         }
+        val rateLabel = TextView(this).apply { textSize = 13f; setTextColor(0xFF6B74A8.toInt()) }
+        val rateSeek = SeekBar(this).apply {
+            max = 15
+            progress = ((prefs.getFloat("tts_rate", 1f) - 0.5f) * 10f).toInt().coerceIn(0, 15)
+        }
+        rateLabel.text = "语速：" + String.format("%.1f", 0.5f + rateSeek.progress / 10f) + "×"
+        rateSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
+                val v = 0.5f + value / 10f
+                rateLabel.text = "语速：" + String.format("%.1f", v) + "×"
+                prefs.edit().putFloat("tts_rate", v).apply()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
+        val pitchLabel = TextView(this).apply { textSize = 13f; setTextColor(0xFF6B74A8.toInt()) }
+        val pitchSeek = SeekBar(this).apply {
+            max = 15
+            progress = ((prefs.getFloat("tts_pitch", 1f) - 0.5f) * 10f).toInt().coerceIn(0, 15)
+        }
+        pitchLabel.text = "音高：" + String.format("%.1f", 0.5f + pitchSeek.progress / 10f) + "×"
+        pitchSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(sb: SeekBar?, value: Int, fromUser: Boolean) {
+                val v = 0.5f + value / 10f
+                pitchLabel.text = "音高：" + String.format("%.1f", v) + "×"
+                prefs.edit().putFloat("tts_pitch", v).apply()
+            }
+            override fun onStartTrackingTouch(sb: SeekBar?) {}
+            override fun onStopTrackingTouch(sb: SeekBar?) {}
+        })
         col.addView(card().apply {
             addView(scaleLabel)
             addView(seek)
             addView(soundBox)
+            addView(rateLabel)
+            addView(rateSeek)
+            addView(pitchLabel)
+            addView(pitchSeek)
+            addView(pill("试听语音", false) { PetService.instance?.testSpeak() })
         })
 
         // ── 陪伴 ──
@@ -225,7 +260,8 @@ class MainActivity : Activity() {
             }
         }
         val affLabel = TextView(this).apply {
-            text = "亲密度：" + prefs.getInt("affinity", 0) + "（聊天和摸头都会涨）"
+            text = "亲密度：" + prefs.getInt("affinity", 0) +
+                "　心情：" + prefs.getInt("mood", 70) + "/100（聊天和摸头都会涨）"
             textSize = 12f
             setTextColor(0xFF6B74A8.toInt())
         }
@@ -245,6 +281,13 @@ class MainActivity : Activity() {
             addView(swLink)
             addView(swCelebrate)
             addView(swIdle)
+            addView(CheckBox(this@MainActivity).apply {
+                text = "省电模式（息屏时暂停她的动画）"
+                textSize = 14f
+                isChecked = prefs.getBoolean("power_save", true)
+                setTextColor(0xFF2A3876.toInt())
+                setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("power_save", c).apply() }
+            })
             addView(affLabel)
             addView(remindLabel)
             for ((mins, label) in listOf(15 to "15 分钟", 25 to "25 分钟", 45 to "45 分钟")) {
@@ -257,6 +300,9 @@ class MainActivity : Activity() {
                     toast("好的，" + label + "后叫你")
                 })
             }
+            addView(pill("查看聊天记录", false) {
+                startActivity(Intent(this@MainActivity, HistoryActivity::class.java))
+            })
             addView(pill("取消提醒", false) {
                 prefs.edit().putLong("remind_at", 0L).apply()
                 showRemind()
