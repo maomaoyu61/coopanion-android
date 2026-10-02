@@ -57,6 +57,8 @@ class PetService : Service() {
     private var ttsReady = false
     private var ttsWarned = false
     private var inputWanted = false
+    private var chat_: TextView? = null
+    private var chatParams_: WindowManager.LayoutParams? = null
     private var mic_: TextView? = null
     private var micParams_: WindowManager.LayoutParams? = null
     private val brain by lazy { Brain(this) }
@@ -307,6 +309,26 @@ class PetService : Service() {
         }
     }
 
+    /** 原生输入条提交的一句话。 */
+    fun submitText(text: String) {
+        handleUserText(text)
+    }
+
+    /** 输入中：把桌宠的活动区域压到屏幕上半部分，键盘弹出来也挡不住它。 */
+    fun setComposing(on: Boolean) {
+        val p = params_ ?: return
+        val dm = resources.displayMetrics
+        val statusBar = dimen("status_bar_height")
+        val navBar = dimen("navigation_bar_height")
+        val full = (dm.heightPixels - statusBar - navBar).coerceAtLeast(320)
+        val want = if (on) (full * 0.45f).toInt() else full
+        if (p.height == want) return
+        p.height = want
+        p.y = statusBar
+        try { wm_?.updateViewLayout(root_, p) } catch (_: Exception) {}
+        if (on) say("我在这儿呢，你说～", listOf("look"))
+    }
+
     /** 页面要输入时临时让窗口可聚焦（键盘才能弹出来），输入结束再变回不抢焦点。 */
     private fun setWindowFocusable(want: Boolean) {
         val p = params_ ?: return
@@ -429,6 +451,40 @@ class PetService : Service() {
         try { wm.addView(mv, mp) } catch (_: Exception) {}
         mic_ = mv
         micParams_ = mp
+
+        val cs = (dm.density * 40).toInt()
+        val cp = WindowManager.LayoutParams(
+            cs, cs,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = base.x + (base.width - cs) / 2
+            y = (base.y - size - cs - (dm.density * 16).toInt()).coerceAtLeast(0)
+        }
+        val cv = TextView(this).apply {
+            gravity = Gravity.CENTER
+            textSize = 17f
+            text = "\uD83D\uDCAC"
+            setTextColor(0xFFFFFFFF.toInt())
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xCC8E44AD.toInt())
+            }
+            alpha = 0.9f
+            setOnClickListener {
+                try {
+                    startActivity(Intent(this@PetService, ChatInputActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                }
+            }
+        }
+        try { wm.addView(cv, cp) } catch (_: Exception) {}
+        chat_ = cv
+        chatParams_ = cp
     }
 
     /** 让 🎤 跟着圆按钮走（收起时一起隐藏）。 */
@@ -443,6 +499,13 @@ class PetService : Service() {
         mp.y = (p.y - size - (dm.density * 8).toInt()).coerceAtLeast(0)
         mv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
         try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
+
+        val cv = chat_ ?: return
+        val cp = chatParams_ ?: return
+        cp.x = p.x + (p.width - cp.width) / 2
+        cp.y = (mp.y - cp.height - (dm.density * 8).toInt()).coerceAtLeast(0)
+        cv.visibility = if (btnCollapsed) android.view.View.GONE else android.view.View.VISIBLE
+        try { wm.updateViewLayout(cv, cp) } catch (_: Exception) {}
     }
 
     private fun paintButton(v: TextView, gray: Boolean) {
@@ -510,6 +573,7 @@ class PetService : Service() {
         try { wm.removeView(v) } catch (_: Exception) {}
         try { wm.addView(v, p) } catch (_: Exception) {}
         try { mic_?.let { m -> wm.removeView(m); wm.addView(m, micParams_) } } catch (_: Exception) {}
+        try { chat_?.let { c -> wm.removeView(c); wm.addView(c, chatParams_) } } catch (_: Exception) {}
     }
 
     private var root_: FrameLayout? = null
@@ -582,6 +646,8 @@ class PetService : Service() {
         tts = null
         try { voice?.destroy() } catch (_: Exception) {}
         voice = null
+        try { chat_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
+        chat_ = null
         try { mic_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
         mic_ = null
         try { btn_?.let { wm_?.removeView(it) } } catch (_: Exception) {}
