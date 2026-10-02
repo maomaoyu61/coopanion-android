@@ -10,52 +10,36 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.view.Gravity
 import android.view.WindowManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import kotlin.math.hypot
-import kotlin.math.min
-import kotlin.random.Random
 
 /**
- * 桌宠本体。
+ * 桌宠本体 —— 全屏透明窗口，不设任何"框"。
  *
- * - 窗口就是桌宠大小（固定最小档 100x170dp），透明置顶，可全屏拖动、也会自己溜达。
- * - **腿的动画交给上游自己**：app 里给桌宠发 `roam:"free"`，它就会在窗口内自己走动/小跑
- *   （之前我关掉 roam 想防它撞墙，结果把动画也关了 —— 撞墙没关系，窗口本身在移动，
- *   看上去就是它在屏幕上走）。
- * - 走动 = 移动窗口本身；另外每 400ms 用 JS 量一次菜单/气泡的真实尺寸，
- *   **按需把窗口撑到刚好装下**（底边和左边不动 → 桌宠屏幕位置不变），
- *   菜单/二级菜单就不会再被裁掉。
+ * 之前几版我在小窗口里量尺寸、撑窗口、自己搬窗口，全是跟框较劲：
+ * 上游（桌面版）本来就是"一个全屏窗口，桌宠自己在里面走、被拖、弹菜单"。
+ * 所以这一版把限制全部去掉：
+ *
+ *  - 窗口 = 整个可用区域（去掉状态栏和导航栏，保证下拉通知/手势还能用）
+ *  - 全透明，不显示任何背景（页面里再注入强制透明样式）
+ *  - roam:"free" → 桌宠自己在整屏范围内走动，腿部动画由上游播放
+ *  - 拖动/菜单/气泡都由上游在页面内处理，绝不被裁
+ *
+ * 代价：全屏窗口会吃掉触摸。所以给了开关：
+ * 通知栏的「触摸穿透」可以在"能撸桌宠"和"正常用手机"之间切换。
  */
 class PetService : Service() {
 
-    private var box_: PetContainer? = null
     private var web_: WebView? = null
     private var server: AssetServer? = null
     private var wm_: WindowManager? = null
     private var params_: WindowManager.LayoutParams? = null
-
-    private val handler = Handler(Looper.getMainLooper())
-    private var curX = 0f
-    private var curY = 0f
-    private var targetX = 0f
-    private var targetY = 0f
-    private var moving = false
-    private var userDragging = false
-    private var petW = 0
-    private var petH = 0
-    private var screenW = 0
-    private var screenH = 0
-    private var density = 1f
-    private var menuUp = 0
-    private var menuRight = 0
+    private var passthrough = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -73,38 +57,36 @@ class PetService : Service() {
         server = s
         lastPort = s.port
         attachPet(s.port)
-        handler.postDelayed(roamTick, 2500)
-        handler.postDelayed(uiWatch, 1500)
+    }
+
+    private fun dimen(name: String): Int {
+        val id = resources.getIdentifier(name, "dimen", "android")
+        return if (id > 0) resources.getDimensionPixelSize(id) else 0
     }
 
     private fun attachPet(port: Int) {
         val wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         wm_ = wm
         val dm = resources.displayMetrics
-        density = dm.density
-        screenW = dm.widthPixels
-        screenH = dm.heightPixels
-        petW = (density * 100).toInt()
-        petH = (density * 170).toInt()
+        val statusBar = dimen("status_bar_height")
+        val navBar = dimen("navigation_bar_height")
 
         val params = WindowManager.LayoutParams(
-            petW, petH,
+            dm.widthPixels,
+            (dm.heightPixels - statusBar - navBar).coerceAtLeast(320),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = (screenW - petW) / 2
-            y = screenH - petH - (density * 48).toInt()
+            x = 0
+            y = statusBar
         }
         params_ = params
-        curX = params.x.toFloat()
-        curY = params.y.toFloat()
 
         val web = WebView(this).apply {
             setBackgroundColor(0x00000000)
-            alpha = 0f
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -122,113 +104,38 @@ class PetService : Service() {
         web.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
         web_ = web
 
-        val container = PetContainer(this, wm, params, { dragging ->
-            userDragging = dragging
-            if (!dragging) {
-                val p = params_
-                if (p != null) {
-                    curX = p.x.toFloat()
-                    curY = (p.y + menuUp).toFloat()
-                }
-                handler.removeCallbacks(roamTick)
-                handler.postDelayed(roamTick, 2000)
-            }
-        })
-        container.setBackgroundColor(0x00000000)
-        container.addView(web, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT))
+        val box = FrameLayout(this).apply {
+            setBackgroundColor(0x00000000)
+            addView(web, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT))
+        }
         try {
-            wm.addView(container, params)
-            box_ = container
+            wm.addView(box, params)
+            root_ = box
         } catch (e: Exception) {
             stopSelf()
-            return
-        }
-
-        val fadeIn = web
-        handler.postDelayed({
-            try {
-                fadeIn.animate().alpha(1f).setDuration(240).start()
-            } catch (_: Exception) {
-            }
-        }, 900)
-    }
-
-    /* -------- 按需把窗口撑到刚好装下菜单/气泡 -------- */
-
-    private val uiWatch = object : Runnable {
-        override fun run() {
-            try {
-                web_?.evaluateJavascript(JS_MEASURE) { r -> applyUiBounds(r) }
-            } catch (_: Exception) {
-            }
-            handler.postDelayed(this, 400)
         }
     }
 
-    private fun applyUiBounds(result: String?) {
-        val p = params_ ?: return
-        var up = 0
-        var right = 0
-        val raw = result?.trim()?.trim('"')
-        if (raw != null && raw.startsWith("[") && raw.endsWith("]")) {
-            val nums = raw.trim('[', ']').split(",").mapNotNull { it.trim().toFloatOrNull() }
-            if (nums.size == 4) {
-                up = (nums[1] * density).toInt().coerceAtLeast(0)
-                val needRight = (nums[2] * density).toInt() - petW
-                right = needRight.coerceAtLeast(0)
-            }
+    private var root_: FrameLayout? = null
+
+    /** 触摸穿透开关：开着的时候手机正常用，关掉才能撸桌宠。 */
+    fun togglePassthrough(): Boolean {
+        val p = params_ ?: return passthrough
+        passthrough = !passthrough
+        p.flags = if (passthrough) {
+            p.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        } else {
+            p.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
         }
-        up = up.coerceIn(0, (density * 430).toInt())
-        right = right.coerceIn(0, (density * 240).toInt())
-        if (up == menuUp && right == menuRight) return
-        menuUp = up
-        menuRight = right
-        p.y = curY.toInt() - menuUp
-        p.height = petH + menuUp
-        p.width = petW + menuRight
         try {
-            wm_?.updateViewLayout(box_, p)
+            wm_?.updateViewLayout(root_, p)
         } catch (_: Exception) {
         }
-    }
-
-    /* -------- 全屏漫游（只动窗口；腿的动画由网页自己放） -------- */
-
-    private val roamTick = object : Runnable {
-        override fun run() {
-            if (userDragging) {
-                handler.postDelayed(this, 400)
-                return
-            }
-            if (!moving) {
-                targetX = Random.nextFloat() * (screenW - petW - menuRight).coerceAtLeast(1)
-                targetY = Random.nextFloat() * (screenH - petH).coerceAtLeast(1)
-                moving = true
-            }
-            val dx = targetX - curX
-            val dy = targetY - curY
-            val dist = hypot(dx, dy)
-            if (dist < 6f) {
-                moving = false
-                handler.postDelayed(this, 2200L + Random.nextLong(3800))
-                return
-            }
-            val step = min(dist, screenW / 130f)
-            curX += dx / dist * step
-            curY += dy / dist * step
-            val p = params_
-            if (p != null) {
-                p.x = curX.toInt()
-                p.y = curY.toInt() - menuUp
-                try {
-                    wm_?.updateViewLayout(box_, p)
-                } catch (_: Exception) {
-                }
-            }
-            handler.postDelayed(this, 33)
-        }
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        nm.notify(NOTIF_ID, buildNotification())
+        return passthrough
     }
 
     private fun createChannel() {
@@ -243,6 +150,9 @@ class PetService : Service() {
     private fun buildNotification(): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val toggle = PendingIntent.getBroadcast(
+            this, 1, Intent(this, PassthroughReceiver::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             Notification.Builder(this, CHANNEL_ID)
         } else {
@@ -251,22 +161,30 @@ class PetService : Service() {
         }
         return builder
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("桌宠在跑（可拖动、会溜达）")
+            .setContentText(if (passthrough) "触摸穿透中（点通知按钮可恢复撸桌宠）"
+                            else "桌宠在整屏活动；挡手就点下面切触摸穿透")
             .setSmallIcon(android.R.drawable.ic_menu_view)
             .setContentIntent(open)
+            .addAction(buildAction(toggle))
             .setOngoing(true)
             .build()
     }
 
+    @Suppress("DEPRECATION")
+    private fun buildAction(pi: PendingIntent): Notification.Action =
+        Notification.Action.Builder(
+            android.R.drawable.ic_menu_view,
+            if (passthrough) "恢复操作桌宠" else "触摸穿透",
+            pi).build()
+
     override fun onDestroy() {
-        handler.removeCallbacksAndMessages(null)
         try {
-            box_?.let { wm_?.removeView(it) }
+            root_?.let { wm_?.removeView(it) }
         } catch (_: Exception) {
         }
         web_?.destroy()
         web_ = null
-        box_ = null
+        root_ = null
         server?.stop()
         server = null
         super.onDestroy()
@@ -279,26 +197,11 @@ class PetService : Service() {
         @Volatile
         var lastPort: Int = 0
 
-        /** 量菜单/气泡/选项面板的真实边界（CSS px，视口坐标）。 */
-        private const val JS_MEASURE = """
-(function(){
-  var sels=['.menu','.bubble','.ask','.b-opts','.b-own','.b-hint'];
-  var l=1e9,t=1e9,r=-1e9,b=-1e9,found=false;
-  for (var i=0;i<sels.length;i++){
-    var els=document.querySelectorAll(sels[i]);
-    for (var j=0;j<els.length;j++){
-      var e=els[j];
-      if (e.hidden || e.offsetParent===null) continue;
-      var cs=getComputedStyle(e);
-      if (cs.display==='none'||cs.visibility==='hidden'||parseFloat(cs.opacity)<0.05) continue;
-      var q=e.getBoundingClientRect();
-      if (q.width<2||q.height<2) continue;
-      found=true;
-      if(q.left<l)l=q.left; if(q.top<t)t=q.top; if(q.right>r)r=q.right; if(q.bottom>b)b=q.bottom;
+        @Volatile
+        var instance: PetService? = null
     }
-  }
-  return found ? ('['+[Math.floor(l),Math.floor(t),Math.ceil(r),Math.ceil(b)].join(',')+']') : 'null';
-})()
-"""
+
+    init {
+        instance = this
     }
 }
