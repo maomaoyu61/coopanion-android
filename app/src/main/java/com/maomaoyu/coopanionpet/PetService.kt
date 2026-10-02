@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.10 ===")
+        s.log("=== PetService 启动 v3.11 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -897,6 +897,9 @@ class PetService : Service() {
         server?.log("收到 " + app + " 通知")
         handler.post { say(app + "有新消息啦～") }
     }
+
+    /** 供 App 显示：桌宠网页还连着吗。 */
+    fun isPetAlive(): Boolean = server?.isPetConnected() == true
 
     /** 试听语音（App 里调语速/音高时用）。 */
     fun testSpeak() {

@@ -257,6 +257,11 @@ class MainActivity : Activity() {
 
         // ── 陪伴 ──
         col.addView(section("④ 陪伴"))
+        val petAliveLabel = TextView(this).apply {
+            textSize = 13f
+            setTextColor(0xFF4759AD.toInt())
+            text = "桌宠连线：未知"
+        }
         val dshStateLabel = TextView(this).apply {
             textSize = 13f
             setTextColor(0xFF4759AD.toInt())
@@ -333,6 +338,7 @@ class MainActivity : Activity() {
                     toast("这台手机没有这个设置页")
                 }
             })
+            addView(petAliveLabel)
             addView(dshStateLabel)
             addView(pill("重新检测 DSH 连接", false) { refreshDsh() })
             addView(affLabel)
@@ -523,6 +529,10 @@ class MainActivity : Activity() {
                 "DSH 播报器：未连接 ✗（在 DSH 里执行 sh /sdcard/dsh/pet-state-start.sh）"
             }
             runOnUiThread { label.text = msg }
+            runOnUiThread {
+                petAliveLabel.text = if (PetService.instance?.isPetAlive() == true)
+                    "桌宠连线：✓ 正常" else "桌宠连线：✗ 已断开（桌宠会自动重载，若一直断开请重启桌宠）"
+            }
         }, "dshprobe").start()
     }
 
