@@ -265,7 +265,7 @@ class AssetServer(private val ctx: Context) {
                     "sampleBackdrop:function(){return new Array(300).fill(255);}" +
                     "};</script>"
                 val posJs = "<script>(function(){var last=0,lx=-1,ly=-1;" +
-                    "function tick(ts){if(ts-last>100){last=ts;" +
+                    "function tick(ts){if(ts-last>400){last=ts;" +
                     "var e=document.querySelector(\"#pet\");" +
                     "if(e\u0026\u0026window.AndroidPet\u0026\u0026window.AndroidPet.pos){" +
                     "var r=e.getBoundingClientRect();" +

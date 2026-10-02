@@ -197,7 +197,7 @@ class PetService : Service() {
         web.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window")
         web_ = web
 
-        val box = FrameLayout(this).apply {
+        val box = PetRoot(this).apply {
             setBackgroundColor(0x00000000)
             addView(web, FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -435,11 +435,9 @@ class PetService : Service() {
             background = BubbleBg()
             elevation = dm.density * 6
             visibility = android.view.View.GONE
-            maxLines = 3
-            ellipsize = android.text.TextUtils.TruncateAt.END
         }
         val p = WindowManager.LayoutParams(
-            (dm.widthPixels * 0.78f).toInt(),
+            (dm.widthPixels * 0.62f).toInt(),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -461,6 +459,23 @@ class PetService : Service() {
     /**
      * 让气泡跟着桌宠走：周期性问页面 #pet 的包围盒，把气泡摆到她头顶上方。
      */
+    /** 全屏容器：只旁听触摸事件，用来识别"双击桌宠 → 打开对话框"，不影响她自己的手势。 */
+    private inner class PetRoot(ctx: Context) : FrameLayout(ctx) {
+        private val gd = android.view.GestureDetector(ctx,
+            object : android.view.GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: android.view.MotionEvent?): Boolean {
+                    server?.log("双击桌宠 → 打开对话框")
+                    showChatInput()
+                    return true
+                }
+            })
+
+        override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+            try { gd.onTouchEvent(ev) } catch (_: Exception) {}
+            return super.dispatchTouchEvent(ev)
+        }
+    }
+
     /** 浅色圆角气泡 + 下方居中小尾巴。 */
     private inner class BubbleBg : android.graphics.drawable.Drawable() {
         private val fill = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -519,7 +534,7 @@ class PetService : Service() {
         val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
         val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
         val by = (py - bh - (dens * 10f).toInt()).coerceAtLeast(0)
-        if (Math.abs(bx - lastBx) < 2 && Math.abs(by - lastBy) < 2) return
+        if (Math.abs(bx - lastBx) < 8 && Math.abs(by - lastBy) < 8) return
         lastBx = bx
         lastBy = by
         p.x = bx

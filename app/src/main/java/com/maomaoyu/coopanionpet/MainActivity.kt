@@ -39,7 +39,7 @@ class MainActivity : Activity() {
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
-            setBackgroundColor(0xFFF4F5F7.toInt())
+            setBackgroundColor(0xFFEEF1FB.toInt())
         }
 
         // ── 标题卡 ──
@@ -146,8 +146,12 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding((d * 14).toInt(), (d * 12).toInt(), (d * 14).toInt(), (d * 12).toInt())
             background = if (gradient) GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFF33558F.toInt(), 0xFF1B2233.toInt())).apply { cornerRadius = d * radius }
-            else GradientDrawable().apply { cornerRadius = d * radius; setColor(bg) }
+                intArrayOf(0xFF4759AD.toInt(), 0xFF2A3876.toInt())).apply { cornerRadius = d * radius }
+            else GradientDrawable().apply {
+                cornerRadius = d * radius
+                setColor(bg)
+                setStroke((d * 1.2f).toInt(), 0xFFDCE3F7.toInt())
+            }
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (d * 12).toInt() }
@@ -157,7 +161,7 @@ class MainActivity : Activity() {
         TextView(this).apply {
             text = title
             textSize = 13f
-            setTextColor(0xFF6B7280.toInt())
+            setTextColor(0xFF6B74A8.toInt())
             setPadding((d * 4).toInt(), (d * 6).toInt(), 0, (d * 6).toInt())
         }
 
@@ -165,7 +169,7 @@ class MainActivity : Activity() {
         TextView(this).apply {
             this.text = text
             textSize = 13f
-            setTextColor(0xFF4B5563.toInt())
+            setTextColor(0xFF5A6390.toInt())
             setLineSpacing(d * 5, 1f)
         }
 
@@ -174,13 +178,13 @@ class MainActivity : Activity() {
             text = label
             textSize = 15f
             isAllCaps = false
-            setTextColor(if (primary) Color.WHITE else 0xFF2C5FD8.toInt())
+            setTextColor(if (primary) Color.WHITE else 0xFF4759AD.toInt())
             background = GradientDrawable().apply {
                 cornerRadius = d * 14
-                if (primary) setColor(0xFF2C5FD8.toInt())
+                if (primary) setColor(0xFF4759AD.toInt())
                 else {
                     setColor(0xFFFFFFFF.toInt())
-                    setStroke((d * 1.2f).toInt(), 0xFFC9D6F2.toInt())
+                    setStroke((d * 1.2f).toInt(), 0xFFB9C4EE.toInt())
                 }
             }
             layoutParams = LinearLayout.LayoutParams(
@@ -206,7 +210,7 @@ class MainActivity : Activity() {
         box.addView(TextView(this).apply {
             text = label
             textSize = 12f
-            setTextColor(0xFF6B7280.toInt())
+            setTextColor(0xFF6B74A8.toInt())
         })
         val et = EditText(this).apply {
             this.hint = hintText
