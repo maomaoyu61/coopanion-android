@@ -82,9 +82,9 @@ class MainActivity : Activity() {
 
         // ── 聊天设置 ──
         col.addView(section("② 聊天设置（默认 DeepSeek）"))
-        val eBase = field("接口地址（留空 = DeepSeek 官方）", "api_base", Brain.DEFAULT_BASE)
-        val eKey = field("API Key（sk- 开头，只存在手机本地）", "api_key", "sk-...", true)
-        val eModel = field("模型名（留空 = deepseek-chat）", "api_model", Brain.DEFAULT_MODEL)
+        val eBase = field(col, "接口地址（留空 = DeepSeek 官方）", "api_base", Brain.DEFAULT_BASE)
+        val eKey = field(col, "API Key（sk- 开头，只存在手机本地）", "api_key", "sk-...", true)
+        val eModel = field(col, "模型名（留空 = deepseek-chat）", "api_model", Brain.DEFAULT_MODEL)
 
         col.addView(card().apply {
             addView(pill("\uD83D\uDCBE  保存并重启桌宠", 0xFF2C7BE5.toInt()) {
@@ -171,7 +171,8 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
         }
 
-    private fun field(label: String, key: String, hintText: String, secret: Boolean = false): EditText {
+    private fun field(parent: LinearLayout, label: String, key: String, hintText: String,
+                        secret: Boolean = false): EditText {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((d * 14).toInt(), (d * 10).toInt(), (d * 14).toInt(), (d * 10).toInt())
@@ -199,25 +200,8 @@ class MainActivity : Activity() {
             }
         }
         box.addView(et)
-        (findViewById<ViewGroup>(android.R.id.content) as? ViewGroup)?.let { }
-        // 直接把 box 加到内容里：这里借用 window 的 decorView 之前的父层不方便，
-        // 所以由调用方负责添加到 col —— 用 container 返回。
-        lastFieldBox = box
-        fieldBoxes.add(box)
+        parent.addView(box)
         return et
-    }
-
-    private val fieldBoxes = ArrayList<LinearLayout>()
-    private var lastFieldBox: LinearLayout? = null
-
-    override fun onStart() {
-        super.onStart()
-        // 把 field() 生成的卡片补挂到内容视图（避免在 field() 里拿不到父容器）
-        val root = (findViewById<ViewGroup>(android.R.id.content)).getChildAt(0) as? ScrollView ?: return
-        val col = root.getChildAt(0) as? LinearLayout ?: return
-        for (b in fieldBoxes) {
-            if (b.parent == null) col.addView(b)
-        }
     }
 
     private fun toast(msg: String) {
