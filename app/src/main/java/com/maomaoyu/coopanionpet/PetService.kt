@@ -112,6 +112,15 @@ class PetService : Service() {
         val s = AssetServer(this)
         s.log("=== PetService 启动 v1.9 ===")
         brain.logCb = { line -> s.log(line) }
+        s.onEval = { code ->
+            handler.post {
+                try {
+                    web_?.evaluateJavascript(code) { r -> s.log("JS结果: " + (r ?: "null")) }
+                } catch (e: Exception) {
+                    s.log("JS异常: " + e.message)
+                }
+            }
+        }
         s.start()
         server = s
         lastPort = s.port
@@ -776,10 +785,14 @@ class PetService : Service() {
     private fun paintButton(v: TextView, gray: Boolean) {
         val dm = resources.displayMetrics
         if (btnCollapsed) {
-            v.background = resources.getDrawable(
-                if (gray) R.drawable.btn_collapsed_use else R.drawable.btn_collapsed_pet, null)
-            v.text = ""
-            v.alpha = 0.95f
+            v.background = GradientDrawable().apply {
+                cornerRadius = dm.density * 8
+                setColor(0xE04759AD.toInt())
+            }
+            v.text = if (btnSide == 0) "\u203A" else "\u2039"
+            v.textSize = 16f
+            v.setTextColor(0xFFFFFFFF.toInt())
+            v.alpha = 1f
             return
         }
         v.background = resources.getDrawable(
@@ -803,14 +816,19 @@ class PetService : Service() {
         val p = btnParams_ ?: return
         val dm = resources.displayMetrics
         btnCollapsed = true
-        p.width = (dm.density * 28).toInt()
+        p.width = (dm.density * 16).toInt()
         p.height = (dm.density * 56).toInt()
         if (btnSide == 0) p.x = 0 else p.x = dm.widthPixels - p.width
         v.text = ""
         v.textSize = 13f
         v.alpha = 0.75f
-        v.background = resources.getDrawable(
-            if (passthrough) R.drawable.btn_collapsed_use else R.drawable.btn_collapsed_pet, null)
+        v.background = GradientDrawable().apply {
+            cornerRadius = dm.density * 8
+            setColor(0xE04759AD.toInt())
+        }
+        v.text = if (btnSide == 0) "\u203A" else "\u2039"
+        v.textSize = 16f
+        v.setTextColor(0xFFFFFFFF.toInt())
         try { wm.updateViewLayout(v, p) } catch (_: Exception) {}
         syncMic()
         saveButtonPos(getSharedPreferences("pet", Context.MODE_PRIVATE))

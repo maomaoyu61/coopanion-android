@@ -29,6 +29,9 @@ class AssetServer(private val ctx: Context) {
     private var saySeq = 0
     private val logs = ArrayDeque<String>()
 
+    /** 由 Service 提供：在桌宠网页里执行一段 JS（用于排错）。 */
+    var onEval: ((String) -> Unit)? = null
+
     /** 记一条日志（同时供 /log 接口读取，方便在电脑/容器里排错）。 */
     fun log(line: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
@@ -230,6 +233,14 @@ class AssetServer(private val ctx: Context) {
                     reply(out, 200, "application/json", p ?: "{}")
                 }
                 path == "/api/avatar" -> reply(out, 404, "text/plain", "no avatar")
+                path == "/debug/js" -> {
+                    val code = parts.getOrNull(2)?.substringAfter("code=", "")?.let {
+                        java.net.URLDecoder.decode(it, "UTF-8")
+                    } ?: ""
+                    log("执行JS: " + code.take(120))
+                    onEval?.invoke(code)
+                    reply(out, 200, "text/plain", "ok")
+                }
                 path == "/log" -> reply(out, 200, "text/plain; charset=utf-8",
                     logText() + "\n\n-- petOut=" + (petOut != null) + " --")
                 path == "/dress" -> serveAsset(out, "/web/dress.html")
