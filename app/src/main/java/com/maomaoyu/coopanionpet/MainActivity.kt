@@ -3,7 +3,10 @@ package com.maomaoyu.coopanionpet
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -17,117 +20,207 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 
+/** 设置页：卡片式布局，蓝白配色，尽量少手写 XML。 */
 class MainActivity : Activity() {
+
+    private lateinit var prefs: SharedPreferences
+    private val d get() = resources.displayMetrics.density
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 语音输入要的麦克风权限
         if (Build.VERSION.SDK_INT >= 23 &&
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         }
+        prefs = getSharedPreferences("pet", MODE_PRIVATE)
 
-        val prefs = getSharedPreferences("pet", MODE_PRIVATE)
-        val pad = (resources.displayMetrics.density * 18).toInt()
+        val pad = (d * 16).toInt()
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
+            setBackgroundColor(0xFFF4F5F7.toInt())
         }
 
-        fun label(s: String) {
-            col.addView(TextView(this).apply {
-                text = s
-                textSize = 14f
-                setPadding(0, pad / 2, 0, 0)
+        // ── 标题卡 ──
+        col.addView(card(0xFF1B2233.toInt(), 20f).apply {
+            addView(TextView(this@MainActivity).apply {
+                text = "\uD83D\uDC33  Coopanion 桌宠"
+                textSize = 21f
+                setTextColor(Color.WHITE)
             })
-        }
-
-        fun button(text: String, onClick: () -> Unit) {
-            col.addView(Button(this).apply {
-                this.text = text
-                setOnClickListener { onClick() }
+            addView(TextView(this@MainActivity).apply {
+                text = "安卓外壳 · 形象/动作/配色都来自上游 Coopanion"
+                textSize = 12f
+                setTextColor(0xFF9FB3D9.toInt())
+                setPadding(0, (d * 6).toInt(), 0, 0)
             })
-        }
-
-        fun edit(key: String, hint: String, secret: Boolean = false): EditText {
-            val e = EditText(this).apply {
-                this.hint = hint
-                setText(prefs.getString(key, ""))
-                textSize = 14f
-                if (secret) {
-                    inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-                }
-            }
-            col.addView(e)
-            return e
-        }
-
-        col.addView(TextView(this).apply {
-            textSize = 15f
-            text = "Coopanion 桌宠（安卓外壳）\n\n" +
-                    "全屏透明窗口 + 上游桌宠网页，形象/配色/动画都来自上游。\n\n" +
-                    "桌面上那个圆按钮：点一下 = 切换「操作手机 / 摸桌宠」；" +
-                    "拖到左右边缘会自动藏成小竖条，点竖条弹回来。\n" +
-                    "长按圆按钮 = 语音说话 🎤"
         })
 
-        button("① 授予悬浮窗权限") {
-            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")))
-        }
-        button("② 启动桌宠") {
-            startForegroundService(Intent(this, PetService::class.java))
-        }
-        button("停止桌宠") {
-            stopService(Intent(this, PetService::class.java))
-        }
-        button("③ 装扮（应用内）") {
-            startActivity(Intent(this, DressActivity::class.java))
-        }
-        button("通知权限设置") {
-            val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-            i.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-            startActivity(i)
-        }
+        // ── 权限与启动 ──
+        col.addView(section("① 权限与启动"))
+        col.addView(card().apply {
+            addView(pill("\uD83D\uDCE6  授予悬浮窗权限", 0xFF2C7BE5.toInt()) {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")))
+            })
+            addView(pill("\u25B6  启动桌宠", 0xFF1FA463.toInt()) {
+                startForegroundService(Intent(this@MainActivity, PetService::class.java))
+            })
+            addView(pill("\u25A0  停止桌宠", 0xFF8A8F99.toInt()) {
+                stopService(Intent(this@MainActivity, PetService::class.java))
+            })
+            addView(pill("\uD83D\uDC57  装扮（换形象 / 配色）", 0xFF8E44AD.toInt()) {
+                startActivity(Intent(this@MainActivity, DressActivity::class.java))
+            })
+            addView(pill("\uD83D\uDD14  通知权限设置", 0xFF6C757D.toInt()) {
+                val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                i.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                startActivity(i)
+            })
+        })
 
-        label("聊天设置（默认 DeepSeek，任何 OpenAI 兼容接口都行）")
-        label("① 接口地址（留空 = 用 DeepSeek）")
-        val eBase = edit("api_base", Brain.DEFAULT_BASE)
-        label("② API Key（sk- 开头，只存在手机本地）")
-        val eKey = edit("api_key", "sk-...", true)
-        label("③ 模型名（留空 = deepseek-chat）")
-        val eModel = edit("api_model", Brain.DEFAULT_MODEL)
-        button("保存设置并重启桌宠") {
-            var base = eBase.text.toString().trim()
-            var key = eKey.text.toString().trim()
-            if (key.isEmpty() && base.startsWith("sk-")) {
-                key = base; base = ""
-                Toast.makeText(this, "检测到 Key 填在了地址栏，已自动纠正", Toast.LENGTH_LONG).show()
-            }
-            prefs.edit()
-                .putString("api_base", base)
-                .putString("api_key", key)
-                .putString("api_model", eModel.text.toString().trim())
-                .apply()
-            stopService(Intent(this, PetService::class.java))
-            startForegroundService(Intent(this, PetService::class.java))
-            Toast.makeText(this, "已保存，桌宠重启中", Toast.LENGTH_SHORT).show()
-        }
-        button("清空聊天记忆") {
-            Brain(this).clearMemory()
-            Toast.makeText(this, "记忆已清空", Toast.LENGTH_SHORT).show()
-        }
+        // ── 聊天设置 ──
+        col.addView(section("② 聊天设置（默认 DeepSeek）"))
+        val eBase = field("接口地址（留空 = DeepSeek 官方）", "api_base", Brain.DEFAULT_BASE)
+        val eKey = field("API Key（sk- 开头，只存在手机本地）", "api_key", "sk-...", true)
+        val eModel = field("模型名（留空 = deepseek-chat）", "api_model", Brain.DEFAULT_MODEL)
 
-        col.addView(TextView(this).apply {
-            textSize = 12f
-            setPadding(0, pad, 0, 0)
-            text = "怎么聊天：点桌宠 → 气泡里会出现输入框和几个选项；" +
-                    "也可以长按悬浮按钮用语音说。"
+        col.addView(card().apply {
+            addView(pill("\uD83D\uDCBE  保存并重启桌宠", 0xFF2C7BE5.toInt()) {
+                var base = eBase.text.toString().trim()
+                var key = eKey.text.toString().trim()
+                if (key.isEmpty() && base.startsWith("sk-")) {
+                    key = base; base = ""
+                    toast("检测到 Key 填在了地址栏，已自动纠正 ✓")
+                }
+                prefs.edit()
+                    .putString("api_base", base)
+                    .putString("api_key", key)
+                    .putString("api_model", eModel.text.toString().trim())
+                    .apply()
+                stopService(Intent(this@MainActivity, PetService::class.java))
+                startForegroundService(Intent(this@MainActivity, PetService::class.java))
+                toast("已保存，桌宠重启中…")
+            })
+            addView(pill("\uD83E\uDDF9  清空聊天记忆", 0xFF8A8F99.toInt()) {
+                Brain(this@MainActivity).clearMemory()
+                toast("记忆已清空")
+            })
+        })
+
+        // ── 使用说明 ──
+        col.addView(section("③ 怎么玩"))
+        col.addView(card().apply {
+            addView(hint("• 桌面上三个悬浮钮：🐾/🖐 切模式、💬 打开输入条\n" +
+                    "• 拖到屏幕左右边缘会自动藏成小竖条，点竖条弹回来\n" +
+                    "• 摸她、拎起来甩、绕圈 —— 都是上游原版交互\n" +
+                    "• 语音：点 💬 后用输入法自带的麦克风"))
         })
 
         setContentView(ScrollView(this).apply { addView(col) },
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    /* ---------- 小工具 ---------- */
+
+    private fun card(bg: Int = Color.WHITE, radius: Float = 16f): LinearLayout =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((d * 14).toInt(), (d * 12).toInt(), (d * 14).toInt(), (d * 12).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = d * radius
+                setColor(bg)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (d * 12).toInt() }
+        }
+
+    private fun section(title: String): TextView =
+        TextView(this).apply {
+            text = title
+            textSize = 13f
+            setTextColor(0xFF6B7280.toInt())
+            setPadding((d * 4).toInt(), (d * 6).toInt(), 0, (d * 6).toInt())
+        }
+
+    private fun hint(text: String): TextView =
+        TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            setTextColor(0xFF4B5563.toInt())
+            setLineSpacing(d * 5, 1f)
+        }
+
+    private fun pill(label: String, bg: Int, onClick: () -> Unit): Button =
+        Button(this).apply {
+            text = label
+            textSize = 15f
+            isAllCaps = false
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply {
+                cornerRadius = d * 12
+                setColor(bg)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (d * 8).toInt() }
+            stateListAnimator = null
+            setOnClickListener { onClick() }
+        }
+
+    private fun field(label: String, key: String, hintText: String, secret: Boolean = false): EditText {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((d * 14).toInt(), (d * 10).toInt(), (d * 14).toInt(), (d * 10).toInt())
+            background = GradientDrawable().apply {
+                cornerRadius = d * 16
+                setColor(Color.WHITE)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (d * 12).toInt() }
+        }
+        box.addView(TextView(this).apply {
+            text = label
+            textSize = 12f
+            setTextColor(0xFF6B7280.toInt())
+        })
+        val et = EditText(this).apply {
+            this.hint = hintText
+            setText(prefs.getString(key, ""))
+            textSize = 15f
+            setSingleLine(true)
+            setBackgroundColor(Color.TRANSPARENT)
+            if (secret) {
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            }
+        }
+        box.addView(et)
+        (findViewById<ViewGroup>(android.R.id.content) as? ViewGroup)?.let { }
+        // 直接把 box 加到内容里：这里借用 window 的 decorView 之前的父层不方便，
+        // 所以由调用方负责添加到 col —— 用 container 返回。
+        lastFieldBox = box
+        fieldBoxes.add(box)
+        return et
+    }
+
+    private val fieldBoxes = ArrayList<LinearLayout>()
+    private var lastFieldBox: LinearLayout? = null
+
+    override fun onStart() {
+        super.onStart()
+        // 把 field() 生成的卡片补挂到内容视图（避免在 field() 里拿不到父容器）
+        val root = (findViewById<ViewGroup>(android.R.id.content)).getChildAt(0) as? ScrollView ?: return
+        val col = root.getChildAt(0) as? LinearLayout ?: return
+        for (b in fieldBoxes) {
+            if (b.parent == null) col.addView(b)
+        }
+    }
+
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 }

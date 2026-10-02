@@ -154,9 +154,10 @@ class PetService : Service() {
         val statusBar = dimen("status_bar_height")
         val navBar = dimen("navigation_bar_height")
 
+        // 贴着屏幕下沿：只避开状态栏，不再扣导航栏（否则桌宠会浮在导航栏上方）
         val params = WindowManager.LayoutParams(
             dm.widthPixels,
-            (dm.heightPixels - statusBar - navBar).coerceAtLeast(320),
+            (dm.heightPixels - statusBar).coerceAtLeast(320),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -430,9 +431,11 @@ class PetService : Service() {
             setPadding((dm.density * 14).toInt(), (dm.density * 10).toInt(),
                 (dm.density * 14).toInt(), (dm.density * 10).toInt())
             background = GradientDrawable().apply {
-                cornerRadius = dm.density * 16
-                setColor(0xF01F2430.toInt())
+                cornerRadius = dm.density * 18
+                setColor(0xF51B2233.toInt())
+                setStroke((dm.density * 1.5f).toInt(), 0x66FFFFFF.toInt())
             }
+            elevation = dm.density * 8
             visibility = android.view.View.GONE
             maxLines = 6
         }
@@ -492,7 +495,7 @@ class PetService : Service() {
         val dm = resources.displayMetrics
         val statusBar = dimen("status_bar_height")
         val navBar = dimen("navigation_bar_height")
-        val full = (dm.heightPixels - statusBar - navBar).coerceAtLeast(320)
+        val full = (dm.heightPixels - statusBar).coerceAtLeast(320)
         val want = if (on) (full * 0.45f).toInt() else full
         if (p.height == want) return
         p.height = want
