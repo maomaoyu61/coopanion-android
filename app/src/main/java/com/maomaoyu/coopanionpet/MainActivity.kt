@@ -451,7 +451,6 @@ class MainActivity : Activity() {
         col.addView(section("⑤ 怎么玩"))
         col.addView(card().apply {
             addView(hint(
-            addView(hint(
                 "【基本玩法】\n" +
                 "• 悬浮钮：点「摸」= 跟她玩（摸头 / 拖拽 / 甩飞）；点「用」= 触摸穿透，正常用手机\n" +
                 "• 把钮拖到屏幕边缘会收成小胶囊，点一下弹回来\n" +
