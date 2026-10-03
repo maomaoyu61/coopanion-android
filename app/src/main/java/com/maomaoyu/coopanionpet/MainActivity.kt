@@ -284,6 +284,7 @@ class MainActivity : Activity() {
             addView(pitchLabel)
             addView(pitchSeek)
             addView(pill("试听语音", false) { PetService.instance?.testSpeak() })
+            addView(pill("测试动作（她会跳一下 + 眨眼）", false) { PetService.instance?.testActions() })
         })
 
         // ── 陪伴 ──
