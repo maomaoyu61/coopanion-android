@@ -126,7 +126,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.28 ===")
+        s.log("=== PetService 启动 v3.29 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -237,6 +237,22 @@ class PetService : Service() {
             } catch (_: Exception) {
             }
             webViewClient = object : WebViewClient() {
+                // 她的骨架必须用 WebGL2：不支持时整块/局部渲染不出来（典型症状就是头发消失）
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    try {
+                        view?.evaluateJavascript(
+                            "!!(document.createElement('canvas').getContext('webgl2'))"
+                        ) { r ->
+                            val ok = r != null && r.contains("true")
+                            webgl2Ok = ok
+                            server?.log(if (ok) "WebGL2 可用" else "WebGL2 不可用 —— 她很可能会缺部件（头发等）")
+                            if (!ok) handler.post {
+                                say("这台手机的 WebView 不支持 WebGL2，我可能会缺胳膊少腿…更新「Android System WebView」通常能修好")
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
                 override fun onReceivedError(
                     view: WebView?,
                     request: android.webkit.WebResourceRequest?,
@@ -727,6 +743,7 @@ class PetService : Service() {
     private var lastPatReplyAt = 0L
     private var loopsStarted = false
     private var loadRetries = 0
+    private var webgl2Ok: Boolean? = null
     private var lastPageError = ""
     private var linkWatchOn = false
     private var deadStreak = 0
@@ -1013,6 +1030,7 @@ class PetService : Service() {
         val w = web_ ?: return "网页: 未创建"
         return try {
             "网页: " + (w.url ?: "?") + " | 进度 " + w.progress + "%" +
+                " | WebGL2: " + (webgl2Ok?.let { if (it) "可用" else "不可用!" } ?: "未检测") +
                 (if (lastPageError.isNotEmpty()) " | 最近错误: " + lastPageError else "")
         } catch (e: Exception) {
             "网页: 读不到"

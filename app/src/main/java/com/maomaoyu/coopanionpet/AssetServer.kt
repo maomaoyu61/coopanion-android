@@ -107,15 +107,23 @@ class AssetServer(private val ctx: Context) {
         val out = petOut
         if (out == null) { noPet("send"); return }
         saySeq++
-        val beat = JSONObject().apply {
-            put("text", text)
-            put("actions", JSONArray(actions))
-            put("anchors", JSONArray())
+        // 用上游同款规则解析【动作】/<动作> 标记，生成带 anchors 的 beats
+        val beats = PetScript.beatsJson(text)
+        if (actions.isNotEmpty()) {
+            try {
+                val b0 = beats.optJSONObject(0)
+                if (b0 != null) {
+                    val a0 = b0.optJSONArray("actions") ?: JSONArray()
+                    for (a in actions) a0.put(a)
+                    b0.put("actions", a0)
+                }
+            } catch (_: Exception) {
+            }
         }
         val msg = JSONObject().apply {
             put("t", "say")
-            put("id", "s$saySeq")
-            put("beats", JSONArray().put(beat))
+            put("id", "s" + saySeq)
+            put("beats", beats)
         }
         rawToPet(out, msg.toString())
     }
