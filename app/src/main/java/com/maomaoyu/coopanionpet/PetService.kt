@@ -58,6 +58,7 @@ class PetService : Service() {
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var ttsWarned = false
+    private var ttsRetry = 0
     private var greeted = false
     private var inputWanted = false
     private var chat_: TextView? = null
@@ -93,9 +94,22 @@ class PetService : Service() {
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             server?.log("TTS status=" + status)
+            if (status != TextToSpeech.SUCCESS && ttsRetry < 3) {
+                ttsRetry++
+                handler.postDelayed({
+                    server?.log("TTS 初始化失败，第 " + ttsRetry + " 次重试")
+                    try { tts?.shutdown() } catch (_: Exception) {}
+                    tts = TextToSpeech(this) { s2 ->
+                        ttsReady = s2 == TextToSpeech.SUCCESS
+                        server?.log("TTS 重试 status=" + s2)
+                        if (ttsReady) try { tts?.language = Locale.CHINA } catch (_: Exception) {}
+                    }
+                }, 2000L * ttsRetry)
+            }
             server?.log("TTS 初始化 status=" + status + " (0=SUCCESS)")
             if (ttsReady) {
                 try {
+                    server?.log("TTS 可用引擎: " + tts?.engines?.joinToString(",").orEmpty())
                     val lang = tts?.setLanguage(Locale.CHINA)
                     server?.log("TTS setLanguage=" + lang)
                     if (lang == TextToSpeech.LANG_MISSING_DATA || lang == TextToSpeech.LANG_NOT_SUPPORTED) {
@@ -110,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.15 ===")
+        s.log("=== PetService 启动 v3.16 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -938,7 +952,17 @@ class PetService : Service() {
         val js = "(function(){try{var u=new SpeechSynthesisUtterance('" + esc + "');" +
             "u.lang='zh-CN';u.rate=" + rate + ";u.pitch=" + pitch + ";" +
             "window.speechSynthesis.cancel();window.speechSynthesis.speak(u);}catch(e){}})()"
-        try { web_?.evaluateJavascript(js, null) } catch (_: Exception) {}
+        // 实测安卓 WebView 没有 speechSynthesis（typeof === "undefined"），先探测再说
+        try {
+            web_?.evaluateJavascript("typeof window.speechSynthesis") { r ->
+                if (r == null || r.contains("undefined")) {
+                    server?.log("网页不支持 speechSynthesis，本次朗读无法出声（等系统 TTS 恢复）")
+                } else {
+                    web_?.evaluateJavascript(js, null)
+                }
+            }
+        } catch (_: Exception) {
+        }
     }
 
     /** 让桌宠说一句：气泡 + 动作（上游）+ 本地朗读（TTS）。 */
