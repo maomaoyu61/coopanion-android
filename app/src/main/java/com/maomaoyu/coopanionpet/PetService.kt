@@ -748,6 +748,27 @@ class PetService : Service() {
         try { wm.addView(v, p) } catch (_: Exception) {}
     }
 
+    /** 按设置把状态条放到固定位置：脚底（屏幕底部居中，默认）/ 头顶 / 不显示。 */
+    fun applyStatusPlacement() {
+        val wm = wm_ ?: return
+        val v = status_ ?: return
+        val p = statusParams_ ?: return
+        val mode = petPrefs().getString("status_pos", "feet")
+        if (mode == "off") {
+            v.visibility = android.view.View.GONE
+            return
+        }
+        val dm = resources.displayMetrics
+        p.gravity = if (mode == "head") Gravity.TOP or Gravity.CENTER_HORIZONTAL
+                    else Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+        p.x = 0
+        p.y = if (mode == "head") dimen("status_bar_height") + (dm.density * 6).toInt()
+              else (dm.density * 46).toInt()
+        try { wm.removeView(v) } catch (_: Exception) {}
+        try { wm.addView(v, p) } catch (_: Exception) {}
+        v.visibility = android.view.View.VISIBLE
+    }
+
     private fun hideStatus() {
         status_?.visibility = android.view.View.GONE
     }
