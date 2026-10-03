@@ -256,6 +256,7 @@ class PetService : Service() {
         }
         addNativeBubble(wm, dm)
         addStatusBar(wm, dm)
+        applyStatusPlacement()
         try {
             val f = android.content.IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_OFF)
