@@ -406,36 +406,24 @@ class MainActivity : Activity() {
             }
             addView(pill("复制诊断信息（发给开发者）", false) {
                 try {
-                    val sb = StringBuilder("CoopanionPet 诊断信息
-")
-                    sb.append("版本: ").append(packageManager.getPackageInfo(packageName, 0).versionName).append("
-")
-                    sb.append("系统: Android ").append(Build.VERSION.RELEASE)
-                      .append(" (SDK ").append(Build.VERSION.SDK_INT).append(")
-")
-                    sb.append("机型: ").append(Build.MANUFACTURER).append(" ").append(Build.MODEL).append("
-")
-                    sb.append("悬浮窗权限: ").append(if (Settings.canDrawOverlays(this@MainActivity)) "有" else "没有").append("
-")
+                    val nl = System.lineSeparator()
+                    val sb = StringBuilder("CoopanionPet 诊断信息" + nl)
+                    sb.append("版本: " + packageManager.getPackageInfo(packageName, 0).versionName + nl)
+                    sb.append("系统: Android " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ")" + nl)
+                    sb.append("机型: " + Build.MANUFACTURER + " " + Build.MODEL + nl)
+                    sb.append("悬浮窗权限: " + (if (Settings.canDrawOverlays(this@MainActivity)) "有" else "没有") + nl)
                     val notifOk = Build.VERSION.SDK_INT < 33 ||
                         checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED
-                    sb.append("通知权限: ").append(if (notifOk) "有" else "没有").append("
-")
+                    sb.append("通知权限: " + (if (notifOk) "有" else "没有") + nl)
                     try {
                         val pm = getSystemService(android.os.PowerManager::class.java)
-                        sb.append("忽略电池优化: ").append(if (pm.isIgnoringBatteryOptimizations(packageName)) "是" else "否").append("
-")
+                        sb.append("忽略电池优化: " + (if (pm.isIgnoringBatteryOptimizations(packageName)) "是" else "否") + nl)
                     } catch (_: Exception) {
                     }
-                    sb.append("桌宠服务: ").append(if (PetService.instance != null) "运行中" else "未运行").append("
-")
-                    sb.append("桌宠连线: ").append(if (PetService.instance?.isPetAlive() == true) "正常" else "断开").append("
-")
-                    sb.append("TTS: ").append(if (prefs.getBoolean("tts_ok", false)) "就绪" else "未知").append("
-")
-                    sb.append("DSH 播报器: ").append(
-                        if ((petAliveLabel?.text ?: "").contains("正常")) "见上" else "见上").append("
-")
+                    sb.append("桌宠服务: " + (if (PetService.instance != null) "运行中" else "未运行") + nl)
+                    sb.append("桌宠连线: " + (if (PetService.instance?.isPetAlive() == true) "正常" else "断开") + nl)
+                    sb.append("TTS: " + (if (prefs.getBoolean("tts_ok", false)) "就绪" else "未知") + nl)
+                    sb.append("DSH 播报器: " + (dshStateLabel?.text ?: "未知") + nl)
                     val cm = getSystemService(android.content.ClipboardManager::class.java)
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("diag", sb.toString()))
                     toast("诊断信息已复制，粘贴发给开发者即可")
