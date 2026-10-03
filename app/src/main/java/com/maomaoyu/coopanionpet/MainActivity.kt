@@ -250,14 +250,14 @@ class MainActivity : Activity() {
         })
         col.addView(card().apply {
             addView(TextView(this@MainActivity).apply {
-                text = "气泡样式（之前会两个重叠：白=网页、灰=原生）"
+                text = "气泡样式（之前两个重叠：我的原生气泡 + 网页自带气泡）"
                 textSize = 12f
                 setTextColor(0xFF6B74A8.toInt())
             })
             addView(android.widget.Spinner(this@MainActivity).apply {
                 adapter = android.widget.ArrayAdapter(this@MainActivity,
                     android.R.layout.simple_spinner_dropdown_item,
-                    listOf("只显示原生（灰，推荐）", "只显示网页（白）", "两个都要"))
+                    listOf("只显示原生气泡（我的·白）", "只显示网页气泡（她的原版·深色）", "两个都要"))
                 val curB = prefs.getString("bubble_mode", "native")
                 setSelection(if (curB == "page") 1 else if (curB == "both") 2 else 0)
                 onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
@@ -380,8 +380,10 @@ class MainActivity : Activity() {
                 setSelection(if (cur == "head") 1 else if (cur == "off") 2 else 0)
                 onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                        prefs.edit().putString("status_pos",
-                            when (position) { 1 -> "head"; 2 -> "off"; else -> "feet" }).apply()
+                        val want = when (position) { 1 -> "head"; 2 -> "off"; else -> "feet" }
+                        if (prefs.getString("status_pos", "feet") == want) return
+                        prefs.edit().putString("status_pos", want).apply()
+                        PetService.instance?.applyStatusPlacement()
                     }
                     override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 }

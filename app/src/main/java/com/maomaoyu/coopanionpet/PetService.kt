@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.23 ===")
+        s.log("=== PetService 启动 v3.24 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -594,24 +594,8 @@ class PetService : Service() {
         val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
         val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
         // 状态条贴她头顶，气泡再叠在状态条上方
-        val ph = (ch * dens).toInt()
-        val posMode = petPrefs().getString("status_pos", "feet")
-        val sv = status_
-        val sp = statusParams_
-        var bubbleTop = py - (dens * 8f).toInt()          // 气泡默认贴她头顶
-        if (sv != null && sp != null && sv.visibility == android.view.View.VISIBLE && posMode != "off") {
-            val sh = if (sv.height > 0) sv.height else (dens * 22f).toInt()
-            val sy = if (posMode == "head") (py - sh - (dens * 6f).toInt()).coerceAtLeast(0)
-                     else (py + ph + (dens * 6f).toInt())   // 脚下（默认）
-            val sx = ((sw - sp.width) / 2).coerceAtLeast(0)
-            // ★ 只有真的位移了才动窗口：秒数每秒都在变，每次都 updateViewLayout 会闪
-            if (Math.abs(sp.y - sy) >= 3 || Math.abs(sp.x - sx) >= 3) {
-                sp.x = sx
-                sp.y = sy
-                try { wm.updateViewLayout(sv, sp) } catch (_: Exception) {}
-            }
-            if (posMode == "head") bubbleTop = sy - (dens * 6f).toInt()
-        }
+        // 气泡贴她头顶；状态条是固定位置（不跟随），所以这里只算气泡
+        val bubbleTop = py - (dens * 8f).toInt()
         val by = (bubbleTop - bh).coerceAtLeast(0)
         if (Math.abs(bx - lastBx) < 1 && Math.abs(by - lastBy) < 1) return
         lastBx = bx
@@ -744,9 +728,10 @@ class PetService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = (dm.widthPixels * 0.14f).toInt()
-            y = dimen("status_bar_height") + (dm.density * 6).toInt()
+            // 固定位置（不跟着她走！跟着走=每秒几十次窗口重排=闪烁）
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            x = 0
+            y = (dm.density * 46).toInt()
         }
         try { wm.addView(v, p) } catch (_: Exception) {}
         status_ = v
