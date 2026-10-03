@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.17 ===")
+        s.log("=== PetService 启动 v3.18 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -594,18 +594,21 @@ class PetService : Service() {
         val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
         val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
         // 状态条贴她头顶，气泡再叠在状态条上方
+        val ph = (ch * dens).toInt()
+        val posMode = petPrefs().getString("status_pos", "feet")
         val sv = status_
         val sp = statusParams_
-        var top = py - (dens * 10f).toInt()
-        if (sv != null && sp != null && sv.visibility == android.view.View.VISIBLE) {
+        var bubbleTop = py - (dens * 8f).toInt()          // 气泡默认贴她头顶
+        if (sv != null && sp != null && sv.visibility == android.view.View.VISIBLE && posMode != "off") {
             val sh = if (sv.height > 0) sv.height else (dens * 22f).toInt()
-            val sy = (top - sh).coerceAtLeast(0)
+            val sy = if (posMode == "head") (py - sh - (dens * 6f).toInt()).coerceAtLeast(0)
+                     else (py + ph + (dens * 6f).toInt())   // 脚下（默认）
             sp.x = ((sw - sp.width) / 2).coerceAtLeast(0)
             sp.y = sy
             try { wm.updateViewLayout(sv, sp) } catch (_: Exception) {}
-            top = sy - (dens * 6f).toInt()
+            if (posMode == "head") bubbleTop = sy - (dens * 6f).toInt()
         }
-        val by = (top - bh).coerceAtLeast(0)
+        val by = (bubbleTop - bh).coerceAtLeast(0)
         if (Math.abs(bx - lastBx) < 1 && Math.abs(by - lastBy) < 1) return
         lastBx = bx
         lastBy = by
@@ -868,10 +871,10 @@ class PetService : Service() {
                     deadStreak = 0
                 } else {
                     deadStreak++
-                    if (deadStreak >= 2 && System.currentTimeMillis() - lastReloadAt > 20000) {
+                    if (deadStreak >= 5 && System.currentTimeMillis() - lastReloadAt > 60000) {
                         lastReloadAt = System.currentTimeMillis()
                         deadStreak = 0
-                        s.log("桌宠 socket 断线超过 16 秒 → 自动重载网页")
+                        s.log("桌宠 socket 断线超过 40 秒 → 自动重载网页")
                         reloadPet()
                     }
                 }

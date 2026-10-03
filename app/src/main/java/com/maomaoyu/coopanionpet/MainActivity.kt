@@ -340,6 +340,25 @@ class MainActivity : Activity() {
                 }
             })
             addView(petAliveLabel)
+            addView(TextView(this@MainActivity).apply {
+                text = "状态条位置"
+                textSize = 12f
+                setTextColor(0xFF6B74A8.toInt())
+            })
+            addView(android.widget.Spinner(this@MainActivity).apply {
+                adapter = android.widget.ArrayAdapter(this@MainActivity,
+                    android.R.layout.simple_spinner_dropdown_item,
+                    listOf("脚下（默认）", "头顶", "不显示"))
+                val cur = prefs.getString("status_pos", "feet")
+                setSelection(if (cur == "head") 1 else if (cur == "off") 2 else 0)
+                onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                        prefs.edit().putString("status_pos",
+                            when (position) { 1 -> "head"; 2 -> "off"; else -> "feet" }).apply()
+                    }
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            })
             addView(dshStateLabel)
             addView(pill("重新检测 DSH 连接", false) { refreshDsh() })
             addView(affLabel)
