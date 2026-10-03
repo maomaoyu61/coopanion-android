@@ -96,8 +96,8 @@ class PetService : Service() {
             p.x = p.x.coerceIn(0, (dm.widthPixels - p.width).coerceAtLeast(0))
             p.y = p.y.coerceIn(0, (dm.heightPixels - p.height).coerceAtLeast(0))
         }
-        try { btn_?.let { v -> wm_?.updateViewLayout(v, btnParams_) } catch (_: Exception) {} } catch (_: Exception) {}
-        try { chat_?.let { v -> wm_?.updateViewLayout(v, chatParams_) } catch (_: Exception) {} } catch (_: Exception) {}
+        try { btn_?.let { v -> wm_?.updateViewLayout(v, btnParams_) } } catch (_: Exception) {}
+        try { chat_?.let { v -> wm_?.updateViewLayout(v, chatParams_) } } catch (_: Exception) {}
         val hide = land && petPrefs().getBoolean("landscape_hide", true)
         btn_?.visibility = if (hide) android.view.View.GONE else android.view.View.VISIBLE
         mic_?.visibility = if (hide) android.view.View.GONE else android.view.View.VISIBLE
