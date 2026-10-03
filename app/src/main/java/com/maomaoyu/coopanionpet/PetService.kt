@@ -82,6 +82,33 @@ class PetService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+
+    /**
+     * 屏幕旋转：横屏（通常是全屏看视频）时把悬浮钮和状态条收起来，
+     * 免得那根收集起来的胶囊竖着杵在画面里；回竖屏自动恢复。
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val dm = resources.displayMetrics
+        val land = newConfig.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        // 钮的坐标是绝对像素，旋转后要夹回屏幕内
+        for (p in listOfNotNull(btnParams_, chatParams_)) {
+            p.x = p.x.coerceIn(0, (dm.widthPixels - p.width).coerceAtLeast(0))
+            p.y = p.y.coerceIn(0, (dm.heightPixels - p.height).coerceAtLeast(0))
+        }
+        try { btn_?.let { v -> wm_?.updateViewLayout(v, btnParams_) } catch (_: Exception) {} } catch (_: Exception) {}
+        try { chat_?.let { v -> wm_?.updateViewLayout(v, chatParams_) } catch (_: Exception) {} } catch (_: Exception) {}
+        val hide = land && petPrefs().getBoolean("landscape_hide", true)
+        btn_?.visibility = if (hide) android.view.View.GONE else android.view.View.VISIBLE
+        mic_?.visibility = if (hide) android.view.View.GONE else android.view.View.VISIBLE
+        chat_?.visibility = if (hide) android.view.View.GONE else android.view.View.VISIBLE
+        if (hide) {
+            status_?.visibility = android.view.View.GONE
+        } else {
+            applyStatusPlacement()
+        }
+        server?.log(if (hide) "横屏：已收起悬浮钮和状态条" else "竖屏：已恢复悬浮钮")
+    }
     override fun onCreate() {
         super.onCreate()
         createChannel()
