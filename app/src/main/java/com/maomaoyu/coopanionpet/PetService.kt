@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.20 ===")
+        s.log("=== PetService 启动 v3.21 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -976,7 +976,8 @@ class PetService : Service() {
     private fun say(text: String, actions: List<String> = emptyList()) {
         server?.log("说 -> " + text.take(80) + " (ttsReady=" + ttsReady + ")")
         server?.sendSay(text, actions)
-        showBubble(text)
+        // 气泡样式：page = 只显示网页那个白气泡；native/both = 也画原生气泡
+        if (petPrefs().getString("bubble_mode", "native") != "page") showBubble(text)
         speakAloud(text)
         if (!ttsReady && !ttsWarned) {
             ttsWarned = true

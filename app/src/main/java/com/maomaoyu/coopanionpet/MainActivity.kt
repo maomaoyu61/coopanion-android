@@ -241,6 +241,29 @@ class MainActivity : Activity() {
         }
         col.addView(card().apply {
             addView(TextView(this@MainActivity).apply {
+                text = "气泡样式（之前会两个重叠：白=网页、灰=原生）"
+                textSize = 12f
+                setTextColor(0xFF6B74A8.toInt())
+            })
+            addView(android.widget.Spinner(this@MainActivity).apply {
+                adapter = android.widget.ArrayAdapter(this@MainActivity,
+                    android.R.layout.simple_spinner_dropdown_item,
+                    listOf("只显示原生（灰，推荐）", "只显示网页（白）", "两个都要"))
+                val curB = prefs.getString("bubble_mode", "native")
+                setSelection(if (curB == "page") 1 else if (curB == "both") 2 else 0)
+                onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+                    override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                        val want = when (position) { 1 -> "page"; 2 -> "both"; else -> "native" }
+                        if (prefs.getString("bubble_mode", "native") == want) return
+                        prefs.edit().putString("bubble_mode", want).apply()
+                        PetService.instance?.reloadPet()
+                    }
+                    override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+                }
+            })
+        })
+        col.addView(card().apply {
+            addView(TextView(this@MainActivity).apply {
                 text = "快捷配色（不用进装扮页）"
                 textSize = 12f
                 setTextColor(0xFF6B74A8.toInt())

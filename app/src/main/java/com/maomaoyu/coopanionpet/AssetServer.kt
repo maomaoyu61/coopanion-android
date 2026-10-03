@@ -355,9 +355,12 @@ class AssetServer(private val ctx: Context) {
                     "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
                     "requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>"
                 val noHover = "<style>#tools{display:none !important;}</style>"
+                // 气泡样式：默认只用原生气泡（灰），把网页那个白气泡藏掉，避免两个重叠
+                val bubbleCss = if (prefs.getString("bubble_mode", "native") == "native")
+                    "<style>#bubble{display:none !important;}</style>" else ""
 
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + hostJs + posJs + "</head>")
-                              else css + noHalo + noHover + hostJs + posJs + html
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + posJs + "</head>")
+                              else css + noHalo + noHover + bubbleCss + hostJs + posJs + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }
             val head = "HTTP/1.1 200 OK\r\nContent-Type: ${mimeOf(path)}\r\nContent-Length: ${data.size}\r\n" +
