@@ -25,6 +25,15 @@ class AssetServer(private val ctx: Context) {
     @Volatile
     private var petOut: java.io.OutputStream? = null
     private var petSock: java.net.Socket? = null
+
+    /**
+     * 发送专用线程。
+     * 关键：Android 禁止在主线程做网络 I/O —— 之前所有 say/prefs 都在主线程直接写 socket，
+     * 每次都被 NetworkOnMainThreadException 打回，于是"消息永远发不出去 + 连接反复重连"。
+     */
+    private val sendExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "pet-send").apply { isDaemon = true }
+    }
     private var walkSeq = 0
     private var walkSide = false
     private var saySeq = 0
@@ -135,14 +144,18 @@ class AssetServer(private val ctx: Context) {
     }
 
     private fun rawToPet(out: java.io.OutputStream, json: String) {
+        // 必须在后台线程写，见 sendExec 的注释
         try {
-            synchronized(out) { sendText(out, json) }
-        } catch (e: Exception) {
-            log("⚠ 发给桌宠失败(" + e.javaClass.simpleName + ") → 关掉连接让它自动重连")
-            petOut = null
-            // 关键：必须把连接关掉，网页端的 onclose 才会触发自动重连；
-            // 只置空 petOut 会让双方都以为还连着 → 永久静默
-            try { petSock?.close() } catch (_: Exception) {}
+            sendExec.execute {
+                try {
+                    synchronized(out) { sendText(out, json) }
+                } catch (e: Exception) {
+                    log("⚠ 发给桌宠失败(" + e.javaClass.simpleName + ") → 关掉连接让它自动重连")
+                    petOut = null
+                    try { petSock?.close() } catch (_: Exception) {}
+                }
+            }
+        } catch (_: Exception) {
         }
     }
 

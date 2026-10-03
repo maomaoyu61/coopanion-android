@@ -110,7 +110,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.14 ===")
+        s.log("=== PetService 启动 v3.15 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
