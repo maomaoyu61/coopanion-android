@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.19 ===")
+        s.log("=== PetService 启动 v3.20 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -603,9 +603,13 @@ class PetService : Service() {
             val sh = if (sv.height > 0) sv.height else (dens * 22f).toInt()
             val sy = if (posMode == "head") (py - sh - (dens * 6f).toInt()).coerceAtLeast(0)
                      else (py + ph + (dens * 6f).toInt())   // 脚下（默认）
-            sp.x = ((sw - sp.width) / 2).coerceAtLeast(0)
-            sp.y = sy
-            try { wm.updateViewLayout(sv, sp) } catch (_: Exception) {}
+            val sx = ((sw - sp.width) / 2).coerceAtLeast(0)
+            // ★ 只有真的位移了才动窗口：秒数每秒都在变，每次都 updateViewLayout 会闪
+            if (Math.abs(sp.y - sy) >= 3 || Math.abs(sp.x - sx) >= 3) {
+                sp.x = sx
+                sp.y = sy
+                try { wm.updateViewLayout(sv, sp) } catch (_: Exception) {}
+            }
             if (posMode == "head") bubbleTop = sy - (dens * 6f).toInt()
         }
         val by = (bubbleTop - bh).coerceAtLeast(0)
