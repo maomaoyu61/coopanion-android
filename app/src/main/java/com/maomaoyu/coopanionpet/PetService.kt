@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.24 ===")
+        s.log("=== PetService 启动 v3.25 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -227,6 +227,12 @@ class PetService : Service() {
             }
             if (Build.VERSION.SDK_INT >= 33) {
                 settings.setAlgorithmicDarkeningAllowed(false)
+            }
+            // 让桌宠的渲染进程主动礼让：系统紧张时优先保留别的 App（例如 DSH 自己的界面），
+            // 否则两个 WebView 抢内存时，DSH 那边可能被系统杀掉渲染进程 → 白屏/黑屏
+            try {
+                setRendererPriorityPolicy(RENDERER_PRIORITY_WAIVED, false)
+            } catch (_: Exception) {
             }
             webViewClient = WebViewClient()
             webChromeClient = object : android.webkit.WebChromeClient() {
@@ -901,8 +907,13 @@ class PetService : Service() {
         override fun onReceive(c: Context?, i: Intent?) {
             if (!petPrefs().getBoolean("power_save", true)) return
             when (i?.action) {
-                Intent.ACTION_SCREEN_OFF -> try { web_?.onPause() } catch (_: Exception) {}
+                Intent.ACTION_SCREEN_OFF -> {
+                    try { web_?.onPause() } catch (_: Exception) {}
+                    // 暂停的 WebView 有时会画黑盖住下面 → 一并隐藏
+                    try { web_?.visibility = android.view.View.INVISIBLE } catch (_: Exception) {}
+                }
                 Intent.ACTION_SCREEN_ON -> {
+                    try { web_?.visibility = android.view.View.VISIBLE } catch (_: Exception) {}
                     try { web_?.onResume() } catch (_: Exception) {}
                     // 省电暂停可能把网页的 socket 弄断了 → 亮屏后自检，断了就重载
                     handler.postDelayed({
