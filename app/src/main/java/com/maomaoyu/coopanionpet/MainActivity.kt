@@ -223,6 +223,12 @@ class MainActivity : Activity() {
         val schemeSp = android.widget.Spinner(this)
         schemeSp.adapter = android.widget.ArrayAdapter(this,
             android.R.layout.simple_spinner_dropdown_item, schemes.map { "配色：" + it })
+        // ★ 关键：按已保存的 scheme 选中对应项。
+        //   否则下拉框永远显示第 0 项，初始化回调会把用户选的配色覆盖回默认值。
+        val curScheme = try {
+            org.json.JSONObject(prefs.getString("skin", "{}")).optString("scheme", "deepseek")
+        } catch (_: Exception) { "deepseek" }
+        schemeSp.setSelection(schemes.indexOf(curScheme).coerceAtLeast(0))
         schemeSp.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 try {

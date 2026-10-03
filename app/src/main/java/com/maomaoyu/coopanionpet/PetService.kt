@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.21 ===")
+        s.log("=== PetService 启动 v3.22 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -174,7 +174,7 @@ class PetService : Service() {
                     if (brain.configured()) {
                         say("我在这儿～ 想聊点什么？")
                     } else {
-                        say("看到我啦～ 先去 App 里填个 API Key，我就能陪你聊天了。")
+                        say(LocalTalk.greeting() + "（填个 API Key 我能聊得更好哦）")
                     }
                 }, 1600)
             }
@@ -822,8 +822,8 @@ class PetService : Service() {
                     lastIdleChatAt = System.currentTimeMillis()
                     lastUserAt = System.currentTimeMillis()
                     Thread({
-                        val line = brain.ask("（现在没人跟你说话，你自己待着。请主动跟主人说一句话，20字以内，符合你的人设）")
-                        handler.post { if (!line.isNullOrBlank()) say(line) }
+                        val line = if (brain.configured()) brain.ask("（现在没人跟你说话，你自己待着。请主动跟主人说一句话，20字以内，符合你的人设）") else null
+                        handler.post { say(line ?: LocalTalk.idleLine()) }
                     }, "idlechat").start()
                 }
             }
@@ -845,8 +845,8 @@ class PetService : Service() {
             touchCount = 0
             lastPatReplyAt = now
             Thread({
-                val line = brain.ask("（主人刚摸了摸你的头。请用一句话回应，20字以内，语气亲近）")
-                handler.post { if (!line.isNullOrBlank()) say(line) }
+                val line = if (brain.configured()) brain.ask("（主人刚摸了摸你的头。请用一句话回应，20字以内，语气亲近）") else null
+                handler.post { say(line ?: LocalTalk.patReply()) }
             }, "pat").start()
         }
     }
@@ -991,6 +991,12 @@ class PetService : Service() {
     private fun handleUserText(text: String) {
         if (text.isBlank()) return
         val srv = server ?: return
+        // 没填 API Key（或断网）时用离线台词库，别让她只能发呆
+        if (!brain.configured()) {
+            lastUserAt = System.currentTimeMillis()
+            say(LocalTalk.reply(text))
+            return
+        }
         lastUserAt = System.currentTimeMillis()
         srv.log("用户说: " + text.take(80))
         srv.sendThinking(true)
