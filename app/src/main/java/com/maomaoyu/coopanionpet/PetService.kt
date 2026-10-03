@@ -231,7 +231,7 @@ class PetService : Service() {
             // 让桌宠的渲染进程主动礼让：系统紧张时优先保留别的 App（例如 DSH 自己的界面），
             // 否则两个 WebView 抢内存时，DSH 那边可能被系统杀掉渲染进程 → 白屏/黑屏
             try {
-                setRendererPriorityPolicy(RENDERER_PRIORITY_WAIVED, false)
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
             } catch (_: Exception) {
             }
             webViewClient = WebViewClient()
