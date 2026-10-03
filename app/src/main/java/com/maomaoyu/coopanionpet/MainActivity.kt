@@ -116,7 +116,7 @@ class MainActivity : Activity() {
         sp.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 val txt = personas[position].second
-                if (txt.isNotEmpty()) personaField.setText(txt)
+                if (txt.isNotEmpty() && personaField.text.toString() != txt) personaField.setText(txt)
             }
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
         }
@@ -227,6 +227,9 @@ class MainActivity : Activity() {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 try {
                     val cur = org.json.JSONObject(prefs.getString("skin", "{}"))
+                    // ★ Spinner 初始化时会自动回调一次；值没变就什么都别做，
+                    //   否则每次打开 App 都会把用户选的配色覆盖回默认值
+                    if (cur.optString("scheme", "deepseek") == schemes[position]) return
                     cur.put("figure", "whale")
                     cur.put("scheme", schemes[position])
                     prefs.edit().putString("skin", cur.toString()).apply()
