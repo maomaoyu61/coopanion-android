@@ -358,6 +358,12 @@ class MainActivity : Activity() {
                 setTextColor(0xFF2A3876.toInt())
                 setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("power_save", c).apply() }
             })
+            addView(CheckBox(this@MainActivity).apply {
+                text = "横屏（看全屏视频）时自动收起悬浮钮和状态条"
+                textSize = 13f
+                isChecked = prefs.getBoolean("landscape_hide", true)
+                setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("landscape_hide", c).apply() }
+            })
           addView(CheckBox(this@MainActivity).apply {
                 text = "微信/QQ 有消息时她提醒我（需通知使用权，只看 App 名不看内容）"
                 textSize = 14f
