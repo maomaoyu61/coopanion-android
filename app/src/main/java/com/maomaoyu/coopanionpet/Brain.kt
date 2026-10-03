@@ -65,7 +65,7 @@ class Brain(private val ctx: Context) {
 
         val hist = history()
         val messages = JSONArray()
-        messages.put(JSONObject().put("role", "system").put("content", persona))
+        messages.put(JSONObject().put("role", "system").put("content", persona + "\n\n" + PET_MARKER_GUIDE))
         messages.put(JSONObject().put("role", "system").put("content",
             "（当前状态：亲密度 " + aff + "，心情 " + mood + "/100 —— " + moodDesc +
             "。回复时自然体现出来，不要直接报数字。）"))

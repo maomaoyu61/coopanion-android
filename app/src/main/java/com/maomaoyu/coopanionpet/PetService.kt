@@ -126,7 +126,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.31 ===")
+        s.log("=== PetService 启动 v3.32 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -820,13 +820,11 @@ class PetService : Service() {
     }
 
     private fun showStatus(t: String) {
-        val wm = wm_ ?: return
         val v = status_ ?: return
-        val p = statusParams_ ?: return
+        if (v.text == t) return
+        // ★ 只原地改文字：绝不能 removeView+addView（那是每秒一次的闪烁源）
         v.text = t
         v.visibility = android.view.View.VISIBLE
-        try { wm.removeView(v) } catch (_: Exception) {}
-        try { wm.addView(v, p) } catch (_: Exception) {}
     }
 
     /** 按设置把状态条放到固定位置：脚底（屏幕底部居中，默认）/ 头顶 / 不显示。 */
