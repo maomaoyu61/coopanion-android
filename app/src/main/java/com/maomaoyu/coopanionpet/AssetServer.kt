@@ -364,7 +364,7 @@ class AssetServer(private val ctx: Context) {
                     "requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>"
                 val noHover = "<style>#tools{display:none !important;}</style>"
                 // 气泡样式：默认只用原生气泡（灰），把网页那个白气泡藏掉，避免两个重叠
-                val bubbleCss = if (prefs.getString("bubble_mode", "native") == "native")
+                val bubbleCss = if (prefs.getString("bubble_mode", "page") == "native")
                     "<style>#bubble{display:none !important;}</style>" else ""
 
                 val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + posJs + "</head>")

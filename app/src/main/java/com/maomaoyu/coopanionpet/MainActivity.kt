@@ -261,13 +261,14 @@ class MainActivity : Activity() {
             addView(android.widget.Spinner(this@MainActivity).apply {
                 adapter = android.widget.ArrayAdapter(this@MainActivity,
                     android.R.layout.simple_spinner_dropdown_item,
-                    listOf("只显示原生气泡（我的·白）", "只显示网页气泡（她的原版·深色）", "两个都要"))
-                val curB = prefs.getString("bubble_mode", "native")
-                setSelection(if (curB == "page") 1 else if (curB == "both") 2 else 0)
+                    listOf("只显示网页气泡（她的原版·深色，推荐）", "只显示原生气泡（我的·白）", "两个都要"))
+                // 默认 = 网页气泡（更流畅）
+                val curB = prefs.getString("bubble_mode", "page")
+                setSelection(if (curB == "native") 1 else if (curB == "both") 2 else 0)
                 onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                        val want = when (position) { 1 -> "page"; 2 -> "both"; else -> "native" }
-                        if (prefs.getString("bubble_mode", "native") == want) return
+                        val want = when (position) { 1 -> "native"; 2 -> "both"; else -> "page" }
+                        if (prefs.getString("bubble_mode", "page") == want) return
                         prefs.edit().putString("bubble_mode", want).apply()
                         PetService.instance?.reloadPet()
                     }
