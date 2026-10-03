@@ -126,7 +126,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.29 ===")
+        s.log("=== PetService 启动 v3.30 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -1026,6 +1026,13 @@ class PetService : Service() {
     fun isPetAlive(): Boolean = server?.isPetConnected() == true
 
     /** 供诊断：桌宠网页当前状态。 */
+
+    /** 动作标记自检：点一下就能看出【】/< 两种标记有没有生效。 */
+    fun testActions() {
+        say("【跳】动作测试成功！<眨眼>这是第二个气泡")
+        server?.log("已发送动作测试（【跳】+ <眨眼>）")
+    }
+
     fun pageInfo(): String {
         val w = web_ ?: return "网页: 未创建"
         return try {

@@ -11,8 +11,8 @@ android {
         applicationId = "com.maomaoyu.coopanionpet"
         minSdk = 26
         targetSdk = 34
-        versionCode = 59
-        versionName = "3.29.0"
+        versionCode = 60
+        versionName = "3.30.0"
     }
 
     buildTypes {
