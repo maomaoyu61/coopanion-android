@@ -35,6 +35,11 @@ class MainActivity : Activity() {
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
         }
+        // Android 13+ 通知权限也要运行时申请，否则前台服务通知不显示
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 2)
+        }
         prefs = getSharedPreferences("pet", MODE_PRIVATE)
 
         val pad = (d * 16).toInt()
@@ -79,8 +84,15 @@ class MainActivity : Activity() {
         col.addView(section("① 权限与启动"))
         col.addView(card().apply {
             addView(pill("授予悬浮窗权限", false) {
-                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")))
+                // 各家 ROM 的这个页面不一样，逐级降级
+                val ok = try {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName"))); true
+                } catch (e: Exception) { false }
+                if (!ok) {
+                    try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)) }
+                    catch (e2: Exception) { toast("请手动到：设置 → 应用 → 显示在其他应用上层") }
+                }
             })
             addView(pill("启动桌宠", true) {
                 startForegroundService(Intent(this@MainActivity, PetService::class.java))
@@ -90,6 +102,23 @@ class MainActivity : Activity() {
             })
             addView(pill("装扮（换形象 / 配色）", false) {
                 startActivity(Intent(this@MainActivity, DressActivity::class.java))
+            })
+            addView(pill("后台保活（忽略省电限制）", false) {
+                try {
+                    startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                        Uri.parse("package:$packageName")))
+                } catch (e: Exception) {
+                    try { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+                    catch (e2: Exception) { toast("请手动到：设置 → 电池 → 应用省电策略 → 无限制") }
+                }
+            })
+            addView(pill("应用详情（开自启动 / 后台运行）", false) {
+                try {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName")))
+                } catch (e: Exception) {
+                    toast("打不开系统设置，请手动到 设置 → 应用 里找 Coopanion 桌宠")
+                }
             })
             addView(pill("通知权限设置", false) {
                 val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -219,32 +248,6 @@ class MainActivity : Activity() {
             override fun onStartTrackingTouch(sb: SeekBar?) {}
             override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
-        val schemes = listOf("deepseek", "claude", "chatgpt", "gemini", "harness", "kimi", "minimax", "qwen")
-        val schemeSp = android.widget.Spinner(this)
-        schemeSp.adapter = android.widget.ArrayAdapter(this,
-            android.R.layout.simple_spinner_dropdown_item, schemes.map { "配色：" + it })
-        // ★ 关键：按已保存的 scheme 选中对应项。
-        //   否则下拉框永远显示第 0 项，初始化回调会把用户选的配色覆盖回默认值。
-        val curScheme = try {
-            org.json.JSONObject(prefs.getString("skin", "{}")).optString("scheme", "deepseek")
-        } catch (_: Exception) { "deepseek" }
-        schemeSp.setSelection(schemes.indexOf(curScheme).coerceAtLeast(0))
-        schemeSp.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                try {
-                    val cur = org.json.JSONObject(prefs.getString("skin", "{}"))
-                    // ★ Spinner 初始化时会自动回调一次；值没变就什么都别做，
-                    //   否则每次打开 App 都会把用户选的配色覆盖回默认值
-                    if (cur.optString("scheme", "deepseek") == schemes[position]) return
-                    cur.put("figure", "whale")
-                    cur.put("scheme", schemes[position])
-                    prefs.edit().putString("skin", cur.toString()).apply()
-                    PetService.instance?.reloadPet()
-                } catch (_: Exception) {
-                }
-            }
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
-        }
         col.addView(card().apply {
             addView(TextView(this@MainActivity).apply {
                 text = "气泡样式（之前会两个重叠：白=网页、灰=原生）"
@@ -267,14 +270,6 @@ class MainActivity : Activity() {
                     override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 }
             })
-        })
-        col.addView(card().apply {
-            addView(TextView(this@MainActivity).apply {
-                text = "快捷配色（不用进装扮页）"
-                textSize = 12f
-                setTextColor(0xFF6B74A8.toInt())
-            })
-            addView(schemeSp)
         })
         col.addView(card().apply {
             addView(scaleLabel)
