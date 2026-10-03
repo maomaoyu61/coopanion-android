@@ -355,7 +355,9 @@ class AssetServer(private val ctx: Context) {
                     "e.stopPropagation();e.preventDefault();},true);</script>"
                 val posJs = killJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1;" +
                     "function tick(ts){if(ts-last>100){last=ts;" +
-                    "var r=document.getElementById('pet').getBoundingClientRect();" +
+                    "var e=document.getElementById('pet');" +
+                    "if(!e||!window.AndroidPet||!window.AndroidPet.pos){window.requestAnimationFrame(tick);return;}" +
+                    "var r=e.getBoundingClientRect();" +
                     "var x=Math.round(r.left),y=Math.round(r.top),w=Math.round(r.width),h=Math.round(r.height);" +
                     "if(Math.abs(x-lx)>2||Math.abs(y-ly)>2||w!==lx){lx=x;ly=y;" +
                     "if(e&&window.AndroidPet&&window.AndroidPet.pos){" +
@@ -368,15 +370,6 @@ class AssetServer(private val ctx: Context) {
                     "window.requestAnimationFrame=function(cb){return raf(function(t){" +
                     "if(t-last>=32){last=t;cb(t);}else{window.requestAnimationFrame(cb);}});};})()</script>"
                     else ""
-                val posJs = killJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1;" +
-                    "function tick(ts){if(ts-last>33){last=ts;" +
-                    "var e=document.querySelector(\"#pet\");" +
-                    "if(e\u0026\u0026window.AndroidPet\u0026\u0026window.AndroidPet.pos){" +
-                    "var r=e.getBoundingClientRect();" +
-                    "var x=Math.round(r.left),y=Math.round(r.top),w=Math.round(r.width),h=Math.round(r.height);" +
-                    "if(Math.abs(x-lx)>1||Math.abs(y-ly)>1){lx=x;ly=y;" +
-                    "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
-                    "requestAnimationFrame(tick);}requestAnimationFrame(tick);})();</script>"
                 val noHover = "<style>#tools{display:none !important;}</style>"
                 // 气泡样式：默认只用原生气泡（灰），把网页那个白气泡藏掉，避免两个重叠
                 val bubbleCss = if (prefs.getString("bubble_mode", "page") == "native")
