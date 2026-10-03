@@ -42,6 +42,10 @@ class MainActivity : Activity() {
         }
         prefs = getSharedPreferences("pet", MODE_PRIVATE)
 
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+            Toast.makeText(this, "没给通知权限：部分手机会因此把桌宠后台杀掉，建议在「通知权限设置」里允许", Toast.LENGTH_LONG).show()
+        }
         val pad = (d * 16).toInt()
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -423,6 +427,7 @@ class MainActivity : Activity() {
                     sb.append("桌宠服务: " + (if (PetService.instance != null) "运行中" else "未运行") + nl)
                     sb.append("桌宠连线: " + (if (PetService.instance?.isPetAlive() == true) "正常" else "断开") + nl)
                     sb.append("TTS: " + (if (prefs.getBoolean("tts_ok", false)) "就绪" else "未知") + nl)
+                    sb.append((PetService.instance?.pageInfo() ?: "网页: 服务未运行") + nl)
                     sb.append("DSH 播报器: " + (dshStateLabel?.text ?: "未知") + nl)
                     val cm = getSystemService(android.content.ClipboardManager::class.java)
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("diag", sb.toString()))

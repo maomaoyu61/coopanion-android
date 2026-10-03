@@ -126,7 +126,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.27 ===")
+        s.log("=== PetService 启动 v3.28 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -236,7 +236,27 @@ class PetService : Service() {
                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
             } catch (_: Exception) {
             }
-            webViewClient = WebViewClient()
+            webViewClient = object : WebViewClient() {
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: android.webkit.WebResourceRequest?,
+                    error: android.webkit.WebResourceError?
+                ) {
+                    val d = try { error?.description?.toString() } catch (_: Exception) { null } ?: "?"
+                    val u = try { request?.url?.toString() } catch (_: Exception) { null } ?: "?"
+                    if (request?.isForMainFrame == true) {
+                        lastPageError = d + " @ " + u
+                        server?.log("页面加载失败: " + d)
+                        if (loadRetries < 3) {
+                            loadRetries++
+                            server?.log("自动重试加载（第 " + loadRetries + " 次）")
+                            handler.postDelayed({
+                                try { view?.loadUrl("http://127.0.0.1:$port/web/pet.html?host=window") } catch (_: Exception) {}
+                            }, 1200L * loadRetries)
+                        }
+                    }
+                }
+            }
             webChromeClient = object : android.webkit.WebChromeClient() {
                 override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
                     server?.log("页面: " + m.message().take(180) + " @" + m.lineNumber())
@@ -985,6 +1005,17 @@ class PetService : Service() {
 
     /** 供 App 显示：桌宠网页还连着吗。 */
     fun isPetAlive(): Boolean = server?.isPetConnected() == true
+
+    /** 供诊断：桌宠网页当前状态。 */
+    fun pageInfo(): String {
+        val w = web_ ?: return "网页: 未创建"
+        return try {
+            "网页: " + (w.url ?: "?") + " | 进度 " + w.progress + "%" +
+                (if (lastPageError.isNotEmpty()) " | 最近错误: " + lastPageError else "")
+        } catch (e: Exception) {
+            "网页: 读不到"
+        }
+    }
 
     /** 试听语音（App 里调语速/音高时用）。 */
     fun testSpeak() {
