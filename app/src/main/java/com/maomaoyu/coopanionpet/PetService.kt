@@ -93,6 +93,7 @@ class PetService : Service() {
         }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+            if (ttsReady) petPrefs().edit().putBoolean("tts_ok", true).apply()
             server?.log("TTS status=" + status)
             if (status != TextToSpeech.SUCCESS && ttsRetry < 3) {
                 ttsRetry++
@@ -117,6 +118,7 @@ class PetService : Service() {
                         server?.log("TTS 缺少中文数据")
                     } else {
                         ttsReady = true
+                        petPrefs().edit().putBoolean("tts_ok", true).apply()
                     }
                 } catch (e: Exception) {
                     server?.log("TTS 语言设置异常: " + e.message)
@@ -124,7 +126,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.26 ===")
+        s.log("=== PetService 启动 v3.27 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
