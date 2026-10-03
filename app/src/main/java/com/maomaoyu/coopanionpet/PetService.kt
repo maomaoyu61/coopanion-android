@@ -890,7 +890,6 @@ class PetService : Service() {
             handler.postDelayed(this, if (!on) 15000L else if (active) 1000L else 8000L)
         }
         }
-    }
 
     private fun applyDshState(st: String, text: String) {
         dshState_ = st
