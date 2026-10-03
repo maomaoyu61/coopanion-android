@@ -124,7 +124,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.25 ===")
+        s.log("=== PetService 启动 v3.26 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -727,7 +727,7 @@ class PetService : Service() {
             visibility = android.view.View.GONE
         }
         val p = WindowManager.LayoutParams(
-            (dm.widthPixels * 0.72f).toInt(),
+            (dm.widthPixels * 0.45f).toInt(),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
@@ -735,10 +735,43 @@ class PetService : Service() {
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
-            // 固定位置（不跟着她走！跟着走=每秒几十次窗口重排=闪烁）
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            x = 0
-            y = (dm.density * 46).toInt()
+            // 绝对定位（不跟着她走！跟着走=每秒几十次窗口重排=闪烁）
+            gravity = Gravity.TOP or Gravity.START
+            x = ((dm.widthPixels - (dm.widthPixels * 0.45f)) / 2).toInt()
+            y = dm.heightPixels - (dm.density * 96).toInt()
+        }
+        // 状态条拖动：拖到任意位置（记住），轻点一下收起（不挡屏幕）
+        val slopS = ViewConfiguration.get(this).scaledTouchSlop
+        var sdX = 0f; var sdY = 0f; var sMoved = false
+        v.setOnTouchListener { view, ev ->
+            val pp = statusParams_
+            if (pp == null) false else when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { sdX = ev.rawX; sdY = ev.rawY; sMoved = false; true }
+                MotionEvent.ACTION_MOVE -> {
+                    if (abs(ev.rawX - sdX) > slopS || abs(ev.rawY - sdY) > slopS) sMoved = true
+                    if (sMoved) {
+                        pp.x = (pp.x + (ev.rawX - sdX)).toInt()
+                        pp.y = (pp.y + (ev.rawY - sdY)).toInt()
+                        sdX = ev.rawX; sdY = ev.rawY
+                        try { wm.updateViewLayout(view, pp) } catch (_: Exception) {}
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!sMoved) {
+                        view.visibility = android.view.View.GONE
+                    } else {
+                        petPrefs().edit()
+                            .putString("status_pos", "custom")
+                            .putInt("status_x", pp.x)
+                            .putInt("status_y", pp.y)
+                            .apply()
+                        server?.log("状态条位置已记住: " + pp.x + "," + pp.y)
+                    }
+                    true
+                }
+                else -> false
+            }
         }
         try { wm.addView(v, p) } catch (_: Exception) {}
         status_ = v
@@ -766,11 +799,21 @@ class PetService : Service() {
             return
         }
         val dm = resources.displayMetrics
-        p.gravity = if (mode == "head") Gravity.TOP or Gravity.CENTER_HORIZONTAL
-                    else Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-        p.x = 0
-        p.y = if (mode == "head") dimen("status_bar_height") + (dm.density * 6).toInt()
-              else (dm.density * 46).toInt()
+        p.gravity = Gravity.TOP or Gravity.START
+        when (mode) {
+            "custom" -> {
+                p.x = petPrefs().getInt("status_x", (dm.widthPixels * 0.27f).toInt())
+                p.y = petPrefs().getInt("status_y", dm.heightPixels - (dm.density * 96).toInt())
+            }
+            "head" -> {
+                p.x = ((dm.widthPixels - p.width) / 2).coerceAtLeast(0)
+                p.y = dimen("status_bar_height") + (dm.density * 6).toInt()
+            }
+            else -> {
+                p.x = ((dm.widthPixels - p.width) / 2).coerceAtLeast(0)
+                p.y = dm.heightPixels - (dm.density * 96).toInt()
+            }
+        }
         try { wm.removeView(v) } catch (_: Exception) {}
         try { wm.addView(v, p) } catch (_: Exception) {}
         v.visibility = android.view.View.VISIBLE

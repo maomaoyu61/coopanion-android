@@ -368,7 +368,7 @@ class MainActivity : Activity() {
             })
             addView(petAliveLabel)
             addView(TextView(this@MainActivity).apply {
-                text = "状态条位置"
+                text = "状态条位置（也可以直接拖动那条状态条，轻点它收起）"
                 textSize = 12f
                 setTextColor(0xFF6B74A8.toInt())
             })
@@ -378,10 +378,12 @@ class MainActivity : Activity() {
                     listOf("脚下（默认）", "头顶", "不显示"))
                 val cur = prefs.getString("status_pos", "feet")
                 setSelection(if (cur == "head") 1 else if (cur == "off") 2 else 0)
+                // 跳过初始化时自动触发的那次回调，否则会把"拖动记住的自定义位置"冲掉
+                var statusCbFirst = true
                 onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                        if (statusCbFirst) { statusCbFirst = false; return }
                         val want = when (position) { 1 -> "head"; 2 -> "off"; else -> "feet" }
-                        if (prefs.getString("status_pos", "feet") == want) return
                         prefs.edit().putString("status_pos", want).apply()
                         PetService.instance?.applyStatusPlacement()
                     }
