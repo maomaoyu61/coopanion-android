@@ -358,13 +358,7 @@ class MainActivity : Activity() {
                 setTextColor(0xFF2A3876.toInt())
                 setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("power_save", c).apply() }
             })
-            addView(android.widget.CheckBox(this@MainActivity).apply {
-                text = "省电：把她的动画限制到 30 帧（更省电，稍微不那么跟手）"
-                textSize = 13f
-                isChecked = prefs.getBoolean("low_fps", true)
-                setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("low_fps", c).apply() }
-            })
-            addView(CheckBox(this@MainActivity).apply {
+          addView(CheckBox(this@MainActivity).apply {
                 text = "微信/QQ 有消息时她提醒我（需通知使用权，只看 App 名不看内容）"
                 textSize = 14f
                 isChecked = prefs.getBoolean("notify_pet", false)

@@ -364,18 +364,12 @@ class AssetServer(private val ctx: Context) {
                     "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
                     "window.requestAnimationFrame(tick);}" +
                     "window.requestAnimationFrame(tick);})()</script>"
-                // 省电：把她的动画限到 30 帧（GL 渲染量直接减半）
-                val lowFpsJs = if (prefs.getBoolean("low_fps", true))
-                    "<script>(function(){var raf=window.requestAnimationFrame.bind(window),last=0;" +
-                    "window.requestAnimationFrame=function(cb){return raf(function(t){" +
-                    "if(t-last>=32){last=t;cb(t);}else{window.requestAnimationFrame(cb);}});};})()</script>"
-                    else ""
                 val noHover = "<style>#tools{display:none !important;}</style>"
                 // 气泡样式：默认只用原生气泡（灰），把网页那个白气泡藏掉，避免两个重叠
                 val bubbleCss = if (prefs.getString("bubble_mode", "page") == "native")
                     "<style>#bubble{display:none !important;}</style>" else ""
 
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + lowFpsJs + posJs + "</head>")
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + posJs + "</head>")
                               else css + noHalo + noHover + bubbleCss + hostJs + posJs + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }
