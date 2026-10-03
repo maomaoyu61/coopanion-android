@@ -358,7 +358,7 @@ class MainActivity : Activity() {
                 setTextColor(0xFF2A3876.toInt())
                 setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("power_save", c).apply() }
             })
-            addView(android.widget.CheckBox(this).apply {
+            addView(android.widget.CheckBox(this@MainActivity).apply {
                 text = "省电：把她的动画限制到 30 帧（更省电，稍微不那么跟手）"
                 textSize = 13f
                 isChecked = prefs.getBoolean("low_fps", true)
