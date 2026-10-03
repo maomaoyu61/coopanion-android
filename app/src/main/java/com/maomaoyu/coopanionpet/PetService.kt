@@ -726,6 +726,8 @@ class PetService : Service() {
     private var touchWindowStart = 0L
     private var lastPatReplyAt = 0L
     private var loopsStarted = false
+    private var loadRetries = 0
+    private var lastPageError = ""
     private var linkWatchOn = false
     private var deadStreak = 0
     private var lastReloadAt = 0L
