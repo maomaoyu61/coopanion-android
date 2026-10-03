@@ -126,7 +126,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.33 ===")
+        s.log("=== PetService 启动 v3.34 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -744,6 +744,8 @@ class PetService : Service() {
     private var loopsStarted = false
     private var loadRetries = 0
     private var webgl2Ok: Boolean? = null
+    private var screenOn_ = true
+    private var dshState_ = ""
     private var lastPageError = ""
     private var linkWatchOn = false
     private var deadStreak = 0
@@ -864,7 +866,10 @@ class PetService : Service() {
 
     private val dshPoll = object : Runnable {
         override fun run() {
-            if (petPrefs().getBoolean("dsh_link", true)) {
+            val on = screenOn_
+            val active = dshState_ == "working" || dshState_ == "thinking"
+            // 息屏时完全停掉（没人看状态条，没必要每秒唤醒）
+            if (on && petPrefs().getBoolean("dsh_link", true)) {
                 Thread({
                     try {
                         val c = (java.net.URL("http://127.0.0.1:8755/").openConnection()
@@ -881,11 +886,14 @@ class PetService : Service() {
                     }
                 }, "dshpoll").start()
             }
-            handler.postDelayed(this, 1000)
+            // 干活时 1 秒一刷；空闲时 8 秒；息屏时 15 秒才检查一次
+            handler.postDelayed(this, if (!on) 15000L else if (active) 1000L else 8000L)
+        }
         }
     }
 
     private fun applyDshState(st: String, text: String) {
+        dshState_ = st
         if (st == dshState && text == dshStatus) return
         server?.log("DSH 状态 -> " + st + " | " + text)
         dshState = st
@@ -990,11 +998,13 @@ class PetService : Service() {
             if (!petPrefs().getBoolean("power_save", true)) return
             when (i?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
+                    screenOn_ = false
                     try { web_?.onPause() } catch (_: Exception) {}
                     // 暂停的 WebView 有时会画黑盖住下面 → 一并隐藏
                     try { web_?.visibility = android.view.View.INVISIBLE } catch (_: Exception) {}
                 }
                 Intent.ACTION_SCREEN_ON -> {
+                    screenOn_ = true
                     try { web_?.visibility = android.view.View.VISIBLE } catch (_: Exception) {}
                     try { web_?.onResume() } catch (_: Exception) {}
                     // 省电暂停可能把网页的 socket 弄断了 → 亮屏后自检，断了就重载

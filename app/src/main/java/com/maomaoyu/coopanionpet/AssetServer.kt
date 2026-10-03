@@ -354,6 +354,21 @@ class AssetServer(private val ctx: Context) {
                 val killJs = "<script>window.addEventListener(\"dblclick\",function(e){" +
                     "e.stopPropagation();e.preventDefault();},true);</script>"
                 val posJs = killJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1;" +
+                    "function tick(ts){if(ts-last>100){last=ts;" +
+                    "var r=document.getElementById('pet').getBoundingClientRect();" +
+                    "var x=Math.round(r.left),y=Math.round(r.top),w=Math.round(r.width),h=Math.round(r.height);" +
+                    "if(Math.abs(x-lx)>2||Math.abs(y-ly)>2||w!==lx){lx=x;ly=y;" +
+                    "if(e&&window.AndroidPet&&window.AndroidPet.pos){" +
+                    "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
+                    "window.requestAnimationFrame(tick);}" +
+                    "window.requestAnimationFrame(tick);})()</script>"
+                // 省电：把她的动画限到 30 帧（GL 渲染量直接减半）
+                val lowFpsJs = if (prefs.getBoolean("low_fps", true))
+                    "<script>(function(){var raf=window.requestAnimationFrame.bind(window),last=0;" +
+                    "window.requestAnimationFrame=function(cb){return raf(function(t){" +
+                    "if(t-last>=32){last=t;cb(t);}else{window.requestAnimationFrame(cb);}});};})()</script>"
+                    else ""
+                val posJs = killJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1;" +
                     "function tick(ts){if(ts-last>33){last=ts;" +
                     "var e=document.querySelector(\"#pet\");" +
                     "if(e\u0026\u0026window.AndroidPet\u0026\u0026window.AndroidPet.pos){" +
@@ -367,7 +382,7 @@ class AssetServer(private val ctx: Context) {
                 val bubbleCss = if (prefs.getString("bubble_mode", "page") == "native")
                     "<style>#bubble{display:none !important;}</style>" else ""
 
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + posJs + "</head>")
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + lowFpsJs + posJs + "</head>")
                               else css + noHalo + noHover + bubbleCss + hostJs + posJs + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }
