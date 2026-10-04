@@ -96,6 +96,46 @@ class PetService : Service() {
     private var lastMx = 0f
     private var lastMy = 0f
     private var lastMoveAt = 0L
+    private var lastJsAt = 0L
+    private var lastFollowAt = 0L
+    private var pendingLx = 0f
+    private var pendingLy = 0f
+    private var movePending = false
+
+    /**
+     * 所有往网页打的调用都走这里：**限流到每 16ms 最多一次**。
+     *
+     * 这是踩过坑之后加的：拖动时触摸事件一秒能来上百个，之前每个事件都
+     * `evaluateJavascript` 一次，直接把 WebView 渲染进程压死 —— 现象是她整个
+     * 从屏幕上消失、日志里 `/log` 也不再应答（服务活着但主循环卡住）。
+     * 她那边本来就设了 RENDERER_PRIORITY_WAIVED（允许系统收走渲染进程），
+     * 所以这种事必须从源头避免。
+     */
+    private fun dispatchJs(code: String) {
+        val w = web_ ?: return
+        lastJsAt = System.currentTimeMillis()
+        try { w.evaluateJavascript(code, null) } catch (_: Exception) {}
+    }
+
+    /** 拖动中的位置：按帧节流后合批成一次 JS 调用。 */
+    private val moveTick = Runnable {
+        movePending = false
+        val code = "(function(){var h=window.__dshPet;" +
+            "if(!h||!h.can())return;" +
+            "h.grabMove(${fmt(pendingLx)},${fmt(pendingLy)});})()"
+        dispatchJs(code)
+    }
+
+    private fun scheduleMove() {
+        if (movePending) return
+        val wait = (16 - (System.currentTimeMillis() - lastJsAt)).coerceAtLeast(0)
+        if (wait == 0L) {
+            moveTick.run()
+        } else {
+            movePending = true
+            handler.postDelayed(moveTick, wait)
+        }
+    }
     private var btnDownX = 0f
     private var btnDownY = 0f
     private var btnStartX = 0
@@ -300,6 +340,19 @@ class PetService : Service() {
             } catch (_: Exception) {
             }
             webViewClient = object : WebViewClient() {
+                /**
+                 * 渲染进程被系统收走（她设了 RENDERER_PRIORITY_WAIVED，这很正常）时，
+                 * 必须自己把网页重新拉起来 —— 否则页面永久冻住，表现就是"她整个消失了"，
+                 * 而且 evaluateJavascript 再也不回调，连诊断都做不了。
+                 */
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: android.webkit.RenderProcessGoneDetail?
+                ): Boolean {
+                    server?.log("⚠ 渲染进程被系统收走（didCrash=" + detail?.didCrash() + "）→ 重建桌宠网页")
+                    handler.postDelayed({ reloadPet() }, 800)
+                    return true   // 返回 true：我们自己处理，别让整个 App 被一起干掉
+                }
                 // 她的骨架必须用 WebGL2：不支持时整块/局部渲染不出来（典型症状就是头发消失）
                 override fun onPageFinished(view: WebView?, url: String?) {
                     try {
@@ -435,12 +488,13 @@ class PetService : Service() {
                         (abs(ev.rawX - midDownX) > slop || abs(ev.rawY - midDownY) > slop)) {
                         midMoved = true
                         server?.log("交互层：拎起桌宠")
-                        // 让网页进入她自己的拖拽状态（暂停自由走动 + 换成被拎的姿势）；
-                        // 之后窗口跟着手指走，她看上去就是被拎着甩。
+                        // 让网页进入她自己的拖拽状态（暂停自由走动 + 换成被拎的姿势）。
+                        // 注意：触摸事件可能一秒来上百个，**绝不能一个事件喂一次 JS** ——
+                        // 之前就是那样把渲染进程压死的（表现：她整个消失 + 服务不再应答）。
                         val code = "(function(){var h=window.__dshPet;" +
                             "if(!h||!h.can())return;" +
                             "h.grab(${fmt(downLx)},${fmt(downLy)});})()"
-                        try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                        dispatchJs(code)
                     }
                     if (midMoved) {
                         val pp = midParams_
@@ -451,16 +505,17 @@ class PetService : Service() {
                             lastMx = ev.rawX
                             lastMy = ev.rawY
                             try { wm.updateViewLayout(v, pp) } catch (_: Exception) {}
-                            val dens = resources.displayMetrics.density
-                            val code = "(function(){var h=window.__dshPet;" +
-                                "if(!h||!h.can())return;" +
-                                "h.grabMove(${fmt((ev.rawX - pp.x) / dens)},${fmt((ev.rawY - pp.y) / dens)});})()"
-                            try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                            // 把"当前位置"记下来，真正的 JS 派发按帧节流（见 dispatchMove）
+                            pendingLx = (ev.rawX - pp.x) / resources.displayMetrics.density
+                            pendingLy = (ev.rawY - pp.y) / resources.displayMetrics.density
+                            scheduleMove()
                         }
                     }
                     true
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    handler.removeCallbacks(moveTick)
+                    movePending = false
                     if (midMoved) {
                         val dens = resources.displayMetrics.density
                         val pp = midParams_
@@ -469,7 +524,7 @@ class PetService : Service() {
                                 "h.grabEnd(${fmt((ev.rawX - (pp?.x ?: 0)) / dens)},${fmt((ev.rawY - (pp?.y ?: 0)) / dens)});})()"
                         else
                             "(function(){var h=window.__dshPet;if(!h||!h.can())return;h.cancel();})()")
-                        try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                        dispatchJs(code)
                     } else if (ev.actionMasked == MotionEvent.ACTION_UP) {
                         val dt = System.currentTimeMillis() - midDownAt
                         val dens = resources.displayMetrics.density
@@ -480,7 +535,7 @@ class PetService : Service() {
                         val ly = fmt((ev.rawY - (pp?.y ?: 0)) / dens)
                         val code = "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
                             "h.grab($lx,$ly);h.grabEnd($lx,$ly);})()"
-                        try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                        dispatchJs(code)
                         server?.log("交互层：轻点她 (" + dt + "ms)")
                     }
                     midMoved = false
@@ -803,7 +858,12 @@ class PetService : Service() {
     private inner class JsBridge {
         @android.webkit.JavascriptInterface
         fun pos(x: Int, y: Int, w: Int, h: Int) {
-            handler.post { followPet(x, y, w, h) }
+            // 网页可能每帧都推，这里合批成每帧最多一次真正的窗口操作 ——
+            // updateViewLayout 一秒钟做上百次同样会把渲染拖死。
+            posX = x; posY = y; posW = w; posH = h
+            if (followPending) return
+            followPending = true
+            handler.post(followTick)
         }
 
         /** 网页报一次视口宽度（CSS 像素）—— 用来把网页坐标精确换算成屏幕像素。 */
@@ -813,10 +873,27 @@ class PetService : Service() {
         }
     }
 
+    private var posX = 0
+    private var posY = 0
+    private var posW = 0
+    private var posH = 0
+    private var followPending = false
+
+    private val followTick = Runnable {
+        followPending = false
+        applyPetPos()
+    }
+
     private var lastBx = Int.MIN_VALUE
     private var lastBy = Int.MIN_VALUE
 
-    private fun followPet(cx: Int, cy: Int, cw: Int, ch: Int) {
+    private fun applyPetPos() {
+        val cx = posX; val cy = posY; val cw = posW; val ch = posH
+        if (cw <= 0 || ch <= 0) return
+        // 窗口操作限流：最快 30ms 一次（约 33fps），比她的帧率略低但完全够跟手
+        val now = System.currentTimeMillis()
+        if (now - lastFollowAt < 30) return
+        lastFollowAt = now
         val wm = wm_ ?: return
         val dm = resources.displayMetrics
         val sw = dm.widthPixels
