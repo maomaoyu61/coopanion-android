@@ -435,11 +435,23 @@ class AssetServer(private val ctx: Context) {
                     "function applyPrefs(p) { window.__dshPet = window.__dshPet || {}; " +
                         "window.__dshPet.ctl = ctl; window.__dshPet.vp = innerWidth; " +
                         "window.__dshPet.inner = innerWidth; __dshLookGuard();")
-                if (d != js) {
-                    data = d.toByteArray(Charsets.UTF_8)
-                    log("pet-app.js 注入: 控制器已暴露" +
-                        (if (d.contains("__dshPet.ctl = ctl")) "" else " ⚠ applyPrefs 未匹配") +
-                        (if (d.contains("__dshLookGuard();")) "" else " ⚠ 守卫未接上"))
+                // 把页面自己的「双击弹输入框」「长按弹菜单」暴露出来：
+                // 穿透模式下页面收不到真实事件（dblclick 还被 killJs 吞了），
+                // 原生端必须能把这两个动作显式喊一次，两种模式才会表现一致。
+                val e = d.replaceFirst(
+                    "function openInput() {",
+                    "window.__dshUI = window.__dshUI || {}; window.__dshUI.input = openInput;\n" +
+                        "function openInput() {")
+                val f = e.replaceFirst(
+                    "function openMenu(x, y) {",
+                    "window.__dshUI = window.__dshUI || {}; window.__dshUI.menu = openMenu;\n" +
+                        "function openMenu(x, y) {")
+                if (f != js) {
+                    data = f.toByteArray(Charsets.UTF_8)
+                    log("pet-app.js 注入: ctl" +
+                        (if (f.contains("__dshPet.ctl = ctl")) "✓" else "✗") +
+                        " 守卫" + (if (f.contains("__dshLookGuard();")) "✓" else "✗") +
+                        " UI" + (if (f.contains("__dshUI.menu = openMenu")) "✓" else "✗"))
                 } else {
                     log("pet-app.js 注入: ⚠ 上游结构变了，未注入")
                 }
@@ -503,22 +515,29 @@ class AssetServer(private val ctx: Context) {
                     "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
                     "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
                     "if(!g){cx=s.x;cy=s.y;}" +
-                    "p.sx=s.x;p.sy=s.y;" +
-                    "p.lx=a.x;p.ly=a.y;p.pt={x:a.x,y:a.y};p.last=performance.now();" +
+                    "p.lx=a.x;p.ly=a.y;p.pt={x:a.x,y:a.y};" +
                     "p.ctl.pointerDown({x:cx,y:cy});" +
                     "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
                     "return true;};" +
+                    // 拖动：只喂「手指这一步移动了多少」。她的 pointerMove 内部会让视觉偏移去追指针，
+                    // 我若每帧再加一次累计位移，等于把她往前推两次 —— 她会跑得比手指/窗口快，
+                    // 看起来就是"有东西挡着她"。所以这里只用增量。
                     "p.grabMove=function(lx,ly){if(!p.can())return false;" +
-                    "var a=cv(lx,ly),r=p.ctl.pet;" +
+                    "var a=cv(lx,ly);" +
                     "if(!p.pt){p.grab(a.x,a.y);return true;}" +
                     "var dx=a.x-p.lx,dy=a.y-p.ly;" +
                     "p.lx=a.x;p.ly=a.y;" +
-                    "p.ctl.pointerMove({x:r.x+p.sx+dx,y:r.fy+p.sy+dy});" +
+                    "if(dx||dy){var r=p.ctl.pet;p.pt.x+=dx;p.pt.y+=dy;" +
+                    "p.ctl.pointerMove({x:p.pt.x,y:p.pt.y});}" +
                     "return true;};" +
                     "p.grabEnd=function(lx,ly){if(!p.can())return false;" +
                     "var a=cv(lx,ly);" +
                     "p.ctl.pointerUp();" +
                     "p.pt=null;return true;};" +
+                    // 显式喊页面自己的两个动作：穿透模式下页面收不到真实事件，
+                    // 而 dblclick 还被 killJs 吞了 —— 只能这样，两种模式才一致。
+                    "p.dbl=function(lx,ly){try{var a=cv(lx,ly);if(window.__dshUI&&window.__dshUI.input){window.__dshUI.input();return true;}}catch(e){}return false;};" +
+                    "p.menu=function(lx,ly){try{var a=cv(lx,ly);if(window.__dshUI&&window.__dshUI.menu){window.__dshUI.menu(a.x,a.y);return true;}}catch(e){}return false;};" +
                     "p.cancel=function(){if(p.can())try{p.ctl.pointerUp();}catch(e){}p.pt=null;};" +
                     "})()</script>"
                 val posJs = killJs + petJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1,lw=-1,lh=-1;" +

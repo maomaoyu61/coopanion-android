@@ -104,6 +104,31 @@ class PetService : Service() {
     private var pageOffX = 0
     private var pageOffY = 0
     private var lastMidLogAt = 0L
+    /** 双击/长按判定（穿透模式下页面收不到真实事件，只能在这边认）。 */
+    private var lastTapAt = 0L
+    private var lastTapX = 0f
+    private var lastTapY = 0f
+    private var pendingTapCode: String? = null
+    private var longPressX = 0f
+    private var longPressY = 0f
+
+    /** 单击延时处理：给双击留出判定窗口。 */
+    private val tapTick = Runnable {
+        val c = pendingTapCode
+        pendingTapCode = null
+        if (c != null) dispatchJs(c)
+    }
+
+    /** 长按（不动）→ 弹她自己的菜单。 */
+    private val longPressTick = Runnable {
+        if (midMoved) return@Runnable
+        val pp = midParams_ ?: return@Runnable
+        val dens = resources.displayMetrics.density
+        val lx = fmt((longPressX - pp.x) / dens)
+        val ly = fmt((longPressY - pp.y) / dens)
+        server?.log("交互层：长按她 → 菜单")
+        dispatchJs("(function(){var h=window.__dshPet;if(h&&h.menu)h.menu($lx,$ly);})()")
+    }
     private var pendingLx = 0f
     private var pendingLy = 0f
     private var movePending = false
@@ -543,6 +568,10 @@ class PetService : Service() {
                 MotionEvent.ACTION_DOWN -> {
                     midMoved = false
                     server?.log("交互层 收到按下 (" + ev.rawX.toInt() + "," + ev.rawY.toInt() + ")")
+                    longPressX = ev.rawX
+                    longPressY = ev.rawY
+                    handler.removeCallbacks(longPressTick)
+                    handler.postDelayed(longPressTick, 550)
                     midDownX = ev.rawX
                     midDownY = ev.rawY
                     midDownScreenY = ev.rawY
@@ -563,6 +592,7 @@ class PetService : Service() {
                     if (!midMoved &&
                         (abs(ev.rawX - midDownX) > slop || abs(ev.rawY - midDownY) > slop)) {
                         midMoved = true
+                        handler.removeCallbacks(longPressTick)
                         server?.log("交互层：拎起桌宠")
                         // 让网页进入她自己的拖拽状态（暂停自由走动 + 换成被拎的姿势）。
                         // 注意：触摸事件可能一秒来上百个，**绝不能一个事件喂一次 JS** ——
@@ -603,17 +633,31 @@ class PetService : Service() {
                             "(function(){var h=window.__dshPet;if(!h||!h.can())return;h.cancel();})()")
                         dispatchJs(code)
                     } else if (ev.actionMasked == MotionEvent.ACTION_UP) {
-                        val dt = System.currentTimeMillis() - midDownAt
+                        handler.removeCallbacks(longPressTick)
                         val dens = resources.displayMetrics.density
                         val pp = midParams_
-                        // 轻点：在按下的那一点喂一次"按下 + 抬起"，
-                        // 让她自己的摸头/点选逻辑接管（会回一条"戳了你"的事件）。
                         val lx = fmt((ev.rawX - (pp?.x ?: 0)) / dens)
                         val ly = fmt((ev.rawY - (pp?.y ?: 0)) / dens)
-                        val code = "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
-                            "h.grab($lx,$ly);h.grabEnd($lx,$ly);})()"
-                        dispatchJs(code)
-                        server?.log("交互层：轻点她 (" + dt + "ms)")
+                        val nowMs = System.currentTimeMillis()
+                        val isDouble = nowMs - lastTapAt < 320 &&
+                            Math.hypot((ev.rawX - lastTapX).toDouble(), (ev.rawY - lastTapY).toDouble()) < dens * 45
+                        if (isDouble) {
+                            // 双击：取消掉"等一下再当单击处理"的延时，直接弹输入框
+                            handler.removeCallbacks(tapTick)
+                            pendingTapCode = null
+                            lastTapAt = 0L
+                            dispatchJs("(function(){var h=window.__dshPet;if(h&&h.dbl)h.dbl($lx,$ly);})()")
+                            server?.log("交互层：双击她 → 输入框")
+                        } else {
+                            // 单击：延时一点再处理，给双击留出判定窗口
+                            lastTapAt = nowMs
+                            lastTapX = ev.rawX
+                            lastTapY = ev.rawY
+                            pendingTapCode = "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
+                                "h.grab($lx,$ly);h.grabEnd($lx,$ly);})()"
+                            handler.postDelayed(tapTick, 200)
+                            server?.log("交互层：轻点她 (" + (nowMs - midDownAt) + "ms)")
+                        }
                     }
                     midMoved = false
                     true
