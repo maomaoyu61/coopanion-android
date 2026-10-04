@@ -460,6 +460,19 @@ class MainActivity : Activity() {
                     sb.append("TTS: " + (if (prefs.getBoolean("tts_ok", false)) "就绪" else "未知") + nl)
                     sb.append((PetService.instance?.pageInfo() ?: "网页: 服务未运行") + nl)
                     sb.append("电脑联动(DSH播报器): " + (dshStateLabel?.text ?: "未知") + nl)
+                    // 设置自检结果（缺哪几项一眼可见，省得来回问）
+                    run {
+                        val miss = ArrayList<String>()
+                        if (!Settings.canDrawOverlays(this@MainActivity)) miss.add("悬浮窗")
+                        if (!notifOk) miss.add("通知")
+                        val battOk = try {
+                            getSystemService(android.os.PowerManager::class.java)
+                                .isIgnoringBatteryOptimizations(packageName)
+                        } catch (e: Exception) { false }
+                        if (!battOk) miss.add("后台保活")
+                        sb.append("设置自检: " + (if (miss.isEmpty()) "全部就绪 ✓"
+                                  else "还差 " + miss.size + " 项: " + miss.joinToString("、")) + nl)
+                    }
                     sb.append("最近日志: " + (PetService.instance?.logTail(4) ?: "(服务未运行)") + nl)
                     val cm = getSystemService(android.content.ClipboardManager::class.java)
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("diag", sb.toString()))
