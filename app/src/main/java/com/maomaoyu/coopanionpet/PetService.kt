@@ -100,6 +100,13 @@ class PetService : Service() {
     private var lastMoveAt = 0L
     private var lastJsAt = 0L
     private var lastFollowAt = 0L
+    /** 拖动时用于算「手指这一步移动了多少」——必须用**原始屏幕坐标**。
+     *  不能拿 (rawX - 窗口x) 去算：窗口跟着她走且有 30ms 限流，
+     *  那样会形成正反馈，她一动就被多推一份，越拖越飞。 */
+    private var lastScreenX = 0f
+    private var lastScreenY = 0f
+    private var downScreenX = 0f
+    private var downScreenY = 0f
     /** 根（渲染）窗口相对屏幕的偏移：交互层的局部坐标 + 这个偏移 = 网页的页面坐标。 */
     private var pageOffX = 0
     private var pageOffY = 0
@@ -123,9 +130,9 @@ class PetService : Service() {
     private val longPressTick = Runnable {
         if (midMoved) return@Runnable
         val pp = midParams_ ?: return@Runnable
-        val dens = resources.displayMetrics.density
-        val lx = fmt((longPressX - pp.x) / dens)
-        val ly = fmt((longPressY - pp.y) / dens)
+        val sc = cssScale()
+        val lx = fmt((longPressX - pp.x + pageOffX) / sc)
+        val ly = fmt((longPressY - pp.y + pageOffY) / sc)
         server?.log("交互层：长按她 → 菜单")
         dispatchJs("(function(){var h=window.__dshPet;if(h&&h.menu)h.menu($lx,$ly);})()")
     }
@@ -579,8 +586,11 @@ class PetService : Service() {
                     midDownAt = System.currentTimeMillis()
                     // 手指落在她身上时，网页的抓取点应当就压在这一下按的地方
                     // 手指落点 → 页面坐标（交互层局部像素 + 根窗口偏移），再按实际缩放换成 CSS 像素
-                    val dens = resources.displayMetrics.density
                     val sc = cssScale()
+                    downScreenX = ev.rawX
+                    downScreenY = ev.rawY
+                    lastScreenX = ev.rawX
+                    lastScreenY = ev.rawY
                     downLx = p2?.let { (ev.rawX - it.x + pageOffX) / sc } ?: 0f
                     downLy = p2?.let { (ev.rawY - it.y + pageOffY) / sc } ?: 0f
                     lastMx = ev.rawX
@@ -611,10 +621,12 @@ class PetService : Service() {
                             lastMx = ev.rawX
                             lastMy = ev.rawY
                             try { wm.updateViewLayout(v, pp) } catch (_: Exception) {}
-                            // 把"当前位置"记下来，真正的 JS 派发按帧节流（见 dispatchMove）
+                            // 只喂手指这一步的**增量**（用原始屏幕坐标算，避免正反馈）
                             val sc2 = cssScale()
-                            pendingLx = (ev.rawX - pp.x + pageOffX) / sc2
-                            pendingLy = (ev.rawY - pp.y + pageOffY) / sc2
+                            pendingLx = (ev.rawX - lastScreenX) / sc2
+                            pendingLy = (ev.rawY - lastScreenY) / sc2
+                            lastScreenX = ev.rawX
+                            lastScreenY = ev.rawY
                             scheduleMove()
                         }
                     }
@@ -624,11 +636,11 @@ class PetService : Service() {
                     handler.removeCallbacks(moveTick)
                     movePending = false
                     if (midMoved) {
-                        val dens = resources.displayMetrics.density
+                        val sc = cssScale()
                         val pp = midParams_
                         val code = (if (ev.actionMasked == MotionEvent.ACTION_UP)
                             "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
-                                "h.grabEnd(${fmt((ev.rawX - (pp?.x ?: 0)) / dens)},${fmt((ev.rawY - (pp?.y ?: 0)) / dens)});})()"
+                                "h.grabEnd(${fmt((ev.rawX - (pp?.x ?: 0) + pageOffX) / sc)},${fmt((ev.rawY - (pp?.y ?: 0) + pageOffY) / sc)});})()"
                         else
                             "(function(){var h=window.__dshPet;if(!h||!h.can())return;h.cancel();})()")
                         dispatchJs(code)
@@ -636,18 +648,20 @@ class PetService : Service() {
                         handler.removeCallbacks(longPressTick)
                         val dens = resources.displayMetrics.density
                         val pp = midParams_
-                        val lx = fmt((ev.rawX - (pp?.x ?: 0)) / dens)
-                        val ly = fmt((ev.rawY - (pp?.y ?: 0)) / dens)
+                        val sc = cssScale()   // 注意：给网页的坐标要按 CSS 缩放换算，别用 density
+                        val lx = fmt((ev.rawX - (pp?.x ?: 0) + pageOffX) / sc)
+                        val ly = fmt((ev.rawY - (pp?.y ?: 0) + pageOffY) / sc)
                         val nowMs = System.currentTimeMillis()
                         val isDouble = nowMs - lastTapAt < 320 &&
                             Math.hypot((ev.rawX - lastTapX).toDouble(), (ev.rawY - lastTapY).toDouble()) < dens * 45
                         if (isDouble) {
-                            // 双击：取消掉"等一下再当单击处理"的延时，直接弹输入框
+                            // 双击：和非穿透模式保持一致 —— 走**我们自己**的输入条（showChatInput），
+                            // 不是网页气泡里那个输入框。同时取消"等一下再当单击处理"的延时。
                             handler.removeCallbacks(tapTick)
                             pendingTapCode = null
                             lastTapAt = 0L
-                            dispatchJs("(function(){var h=window.__dshPet;if(h&&h.dbl)h.dbl($lx,$ly);})()")
                             server?.log("交互层：双击她 → 输入框")
+                            showChatInput()
                         } else {
                             // 单击：延时一点再处理，给双击留出判定窗口
                             lastTapAt = nowMs
