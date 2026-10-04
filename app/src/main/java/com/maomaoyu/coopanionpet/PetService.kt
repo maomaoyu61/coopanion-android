@@ -831,10 +831,10 @@ class PetService : Service() {
                     if (!sMoved) {
                         view.visibility = android.view.View.GONE
                         petPrefs().edit().putBoolean("status_hidden", true).apply()
-                        server?.log("状态条已被手动收起（在设置里切换位置可恢复）")
+                        server?.log("状态条已被手动收起（设置里有「恢复显示状态条」按钮）")
                         android.widget.Toast.makeText(
                             this@PetService,
-                            "状态条已收起，想恢复去「④ 陪伴 → 状态条位置」切一下",
+                            "状态条已收起，想恢复去「④ 陪伴 → 恢复显示状态条」",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     } else {
