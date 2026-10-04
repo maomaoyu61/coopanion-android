@@ -65,7 +65,7 @@ class AssetServer(private val ctx: Context) {
      */
     private fun transpileJs(src: String): String {
         var s = src
-        val id = "([A-Za-z_$][A-Za-z0-9_$]*)"
+        val id = "((?:[A-Za-z_$][A-Za-z0-9_$]*\\.)*[A-Za-z_$][A-Za-z0-9_$]*)"
         s = s.replace(Regex("$id\\s*\\?\\?=")) { m -> m.groupValues[1] + " = (" + m.groupValues[1] + " !== null && " + m.groupValues[1] + " !== void 0) ? " + m.groupValues[1] + " : " }
         s = s.replace(Regex("$id\\s*\\|\\|=")) { m -> m.groupValues[1] + " = " + m.groupValues[1] + " || " }
         s = s.replace(Regex("$id\\s*&&=")) { m -> m.groupValues[1] + " = " + m.groupValues[1] + " && " }
