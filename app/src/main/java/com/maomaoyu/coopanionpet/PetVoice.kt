@@ -24,7 +24,7 @@ class PetVoice(private val ctx: Context) {
 
     fun isRunning() = running
 
-    private fun log(s: String) { PetService.instance?.server?.log("语音口令: " + s) }
+    private fun log(s: String) { PetService.instance?.logLine("语音口令: " + s) }
 
     fun start() {
         if (running) return

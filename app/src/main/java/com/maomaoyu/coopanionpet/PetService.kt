@@ -1119,6 +1119,11 @@ class PetService : Service() {
     /** 供 App 显示：桌宠网页还连着吗。 */
     fun isPetAlive(): Boolean = server?.isPetConnected() == true
 
+    /** 给别的类写日志用（server 是私有的）。 */
+    fun logLine(s: String) {
+        try { server?.log(s) } catch (_: Exception) {}
+    }
+
     /** 按设置和息屏状态，决定语音口令听不听。 */
     fun syncVoice() {
         val want = petPrefs().getBoolean("voice_cmd", false) && screenOn_

@@ -249,7 +249,7 @@ class PetA11yService : AccessibilityService() {
             val main = android.content.Intent(android.content.Intent.ACTION_MAIN)
                 .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
             val list = pm.queryIntentActivities(main, 0)
-            PetService.instance?.server?.log("openApp: 查到 " + list.size + " 个可启动应用")
+            PetService.instance?.logLine("openApp: 查到 " + list.size + " 个可启动应用")
             var fuzzy: String? = null
             for (ri in list) {
                 val label = ri.loadLabel(pm).toString()
@@ -259,7 +259,7 @@ class PetA11yService : AccessibilityService() {
             }
             if (fuzzy != null) return launch(fuzzy)
         } catch (e: Exception) {
-            PetService.instance?.server?.log("openApp 出错: " + e.javaClass.simpleName)
+            PetService.instance?.logLine("openApp 出错: " + e.javaClass.simpleName)
         }
         return false
     }
