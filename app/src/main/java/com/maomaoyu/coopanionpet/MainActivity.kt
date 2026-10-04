@@ -76,7 +76,7 @@ class MainActivity : Activity() {
                         setTextColor(Color.WHITE)
                     })
                     addView(TextView(this@MainActivity).apply {
-                        text = "安卓外壳 · 形象/动作/配色来自上游"
+                        text = "形象与动作来自上游 Coopanion"
                         textSize = 12f
                         setTextColor(0xFF9FB3D9.toInt())
                         setPadding(0, (d * 4).toInt(), 0, 0)
@@ -254,14 +254,14 @@ class MainActivity : Activity() {
         })
         col.addView(card().apply {
             addView(TextView(this@MainActivity).apply {
-                text = "气泡样式（之前两个重叠：我的原生气泡 + 网页自带气泡）"
+                text = "气泡样式"
                 textSize = 12f
                 setTextColor(0xFF6B74A8.toInt())
             })
             addView(android.widget.Spinner(this@MainActivity).apply {
                 adapter = android.widget.ArrayAdapter(this@MainActivity,
                     android.R.layout.simple_spinner_dropdown_item,
-                    listOf("只显示网页气泡（她的原版·深色，推荐）", "只显示原生气泡（我的·白）", "两个都要"))
+                    listOf("只显示网页气泡（推荐）", "只显示原生气泡（我的·白）", "两个都要"))
                 // 默认 = 网页气泡（更流畅）
                 val curB = prefs.getString("bubble_mode", "page")
                 setSelection(if (curB == "native") 1 else if (curB == "both") 2 else 0)
@@ -303,7 +303,7 @@ class MainActivity : Activity() {
         }
         this.dshStateLabel = dshStateLabel
         val swLink = CheckBox(this).apply {
-            text = "跟着 DSH 状态变脸（干活时冒问号、头顶显示当前任务）"
+            text = "跟着 DSH 状态变表情（干活时会冒问号）"
             textSize = 14f
             isChecked = prefs.getBoolean("dsh_link", true)
             setTextColor(0xFF2A3876.toInt())
@@ -405,7 +405,7 @@ class MainActivity : Activity() {
                     override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 }
             })
-            addView(pill("恢复显示状态条（如果它被收起了）", false) {
+            addView(pill("恢复显示状态条", false) {
                 prefs.edit().putString("status_pos", "feet")
                     .putBoolean("status_hidden", false)
                     .apply()
@@ -489,7 +489,7 @@ class MainActivity : Activity() {
                 "\n【出问题怎么办】\n" +
                 "• 「④ 陪伴 → 复制诊断信息」→ 把那段文字发我，我就能远程定位问题\n" +
                 "• 她整个身体靠 WebGL2 渲染；若头发/身体缺失，先去应用商店更新「Android System WebView」\n" +
-                "• 状态条不动了＝DSH 里那个播报器停了，跟我说一声我拉起来，或自己跑 sh /sdcard/dsh/pet-state-start.sh"))
+                "• 状态条不动了＝DSH 里那个播报器停了，跟我说一声就行"))
         })
 
         setContentView(ScrollView(this).apply { addView(col) },
@@ -644,7 +644,7 @@ class MainActivity : Activity() {
                     else -> "DSH 播报器：已连接 ✓（" + o.optString("text") + "）"
                 }
             } catch (e: Exception) {
-                "DSH 播报器：未连接 ✗（在 DSH 里执行 sh /sdcard/dsh/pet-state-start.sh）"
+                "DSH 播报器：未连接 ✗（跟我说一声，或重启一次 DSH 即可）"
             }
             runOnUiThread { label.text = msg }
             runOnUiThread {
