@@ -1205,7 +1205,8 @@ class PetService : Service() {
     }
 
     /** 让桌宠说一句：气泡 + 动作（上游）+ 本地朗读（TTS）。 */
-    private fun say(text: String, actions: List<String> = emptyList()) {
+    /** 让她说一句（气泡 + 朗读）。语音口令那边也要用，所以是公开的。 */
+    fun say(text: String, actions: List<String> = emptyList()) {
         server?.log("说 -> " + text.take(80) + " (ttsReady=" + ttsReady + ")")
         server?.sendSay(text, actions)
         // 气泡样式：page = 只显示网页那个白气泡；native/both = 也画原生气泡
