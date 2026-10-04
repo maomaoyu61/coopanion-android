@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Coopanion 桌宠</string>
     <string name="notif_channel">桌宠运行中</string>
+    <string name="a11y_desc">让桌宠帮你操作手机（读取屏幕、点按、滑动、输入）</string>
+    <string name="a11y_summary">开启后她能替你点按、滑动、返回、输入、打开应用。仅在本机执行你的指令，不采集不外传。</string>
 </resources>

@@ -171,7 +171,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.51 ===")
+        s.log("=== PetService 启动 v4.0 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -1208,6 +1208,18 @@ class PetService : Service() {
     private fun handleUserText(text: String) {
         if (text.isBlank()) return
         val srv = server ?: return
+        // 先看是不是"让她操作手机"的指令（需要用户显式允许 + 无障碍已开）
+        if (petPrefs().getBoolean("a11y_control", false) && PetA11yService.alive()) {
+            try {
+                val r = PetCmd.handle(text)
+                if (r != null) {
+                    lastUserAt = System.currentTimeMillis()
+                    say(r)
+                    return
+                }
+            } catch (_: Exception) {
+            }
+        }
         // 没填 API Key（或断网）时用离线台词库，别让她只能发呆
         if (!brain.configured()) {
             lastUserAt = System.currentTimeMillis()

@@ -131,6 +131,19 @@ class MainActivity : Activity() {
                     toast("打不开系统设置，请手动到 设置 → 应用 里找 Coopanion 桌宠")
                 }
             })
+            addView(pill("开启无障碍（让她能操作手机）", false) {
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (e: Exception) {
+                    toast("请手动到：设置 → 无障碍 → 已安装的服务 → 大肥鱼")
+                }
+            })
+            addView(CheckBox(this@MainActivity).apply {
+                text = "允许她操作手机（会读屏幕，只按你的指令动手；密码框不碰）"
+                textSize = 13f
+                isChecked = prefs.getBoolean("a11y_control", false)
+                setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("a11y_control", c).apply() }
+            })
             addView(pill("通知权限设置", false) {
                 val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 i.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
