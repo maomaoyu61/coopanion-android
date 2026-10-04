@@ -171,7 +171,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v4.0 ===")
+        s.log("=== PetService 启动 v4.1 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -791,6 +791,7 @@ class PetService : Service() {
     private var webgl2Ok: Boolean? = null
     private var petRect_ = "未检测"
     private var animOk_: Boolean? = null
+    private var voice_: PetVoice? = null
     private var screenOn_ = true
     private var dshState_ = ""
     private var lastPageError = ""
@@ -1082,12 +1083,14 @@ class PetService : Service() {
             when (i?.action) {
                 Intent.ACTION_SCREEN_OFF -> {
                     screenOn_ = false
+                    try { voice_?.stop() } catch (_: Exception) {}
                     try { web_?.onPause() } catch (_: Exception) {}
                     // 暂停的 WebView 有时会画黑盖住下面 → 一并隐藏
                     try { web_?.visibility = android.view.View.INVISIBLE } catch (_: Exception) {}
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     screenOn_ = true
+                    try { syncVoice() } catch (_: Exception) {}
                     try { web_?.visibility = android.view.View.VISIBLE } catch (_: Exception) {}
                     try { web_?.onResume() } catch (_: Exception) {}
                     // 省电暂停可能把网页的 socket 弄断了 → 亮屏后自检，断了就重载
@@ -1115,6 +1118,18 @@ class PetService : Service() {
 
     /** 供 App 显示：桌宠网页还连着吗。 */
     fun isPetAlive(): Boolean = server?.isPetConnected() == true
+
+    /** 按设置和息屏状态，决定语音口令听不听。 */
+    fun syncVoice() {
+        val want = petPrefs().getBoolean("voice_cmd", false) && screenOn_
+        if (want) {
+            if (voice_ == null) voice_ = PetVoice(this)
+            voice_?.start()
+            server?.log("语音口令：已开始监听（口令词：大肥鱼）")
+        } else {
+            voice_?.stop()
+        }
+    }
 
     /** 供诊断：最近日志（含页面 console）。 */
     fun logTail(n: Int): String = try { server?.logTail(n) ?: "(无)" } catch (e: Exception) { "(读不到)" }
@@ -1518,6 +1533,7 @@ class PetService : Service() {
         root_ = null
         server?.stop()
         server = null
+        try { voice_?.stop() } catch (_: Exception) {}
         super.onDestroy()
     }
 

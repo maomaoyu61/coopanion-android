@@ -144,6 +144,16 @@ class MainActivity : Activity() {
                 isChecked = prefs.getBoolean("a11y_control", false)
                 setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("a11y_control", c).apply() }
             })
+            addView(CheckBox(this@MainActivity).apply {
+                text = "语音口令：听到「大肥鱼…」就执行（一直用麦克风，比较费电）"
+                textSize = 13f
+                isChecked = prefs.getBoolean("voice_cmd", false)
+                setOnCheckedChangeListener { _, c ->
+                    prefs.edit().putBoolean("voice_cmd", c).apply()
+                    PetService.instance?.syncVoice()
+                    if (c) toast("已开启：对着手机说「大肥鱼，帮我打开微信」试试")
+                }
+            })
             addView(pill("通知权限设置", false) {
                 val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 i.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
