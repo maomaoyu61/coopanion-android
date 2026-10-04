@@ -53,6 +53,12 @@ class AssetServer(private val ctx: Context) {
     var onEval: ((String) -> Unit)? = null
 
     /** 记一条日志（同时供 /log 接口读取，方便在电脑/容器里排错）。 */
+    /** 给诊断用：最近 n 条日志（含页面 console）。 */
+    fun logTail(n: Int): String = synchronized(logRing) {
+        val from = (logRing.size - n).coerceAtLeast(0)
+        logRing.subList(from, logRing.size).joinToString(" | ")
+    }
+
     fun log(line: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         synchronized(logs) {

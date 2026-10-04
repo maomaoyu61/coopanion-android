@@ -153,7 +153,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.44 ===")
+        s.log("=== PetService 启动 v3.45 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -771,6 +771,8 @@ class PetService : Service() {
     private var loopsStarted = false
     private var loadRetries = 0
     private var webgl2Ok: Boolean? = null
+    private var petRect_ = "未检测"
+    private var animOk_: Boolean? = null
     private var screenOn_ = true
     private var dshState_ = ""
     private var lastPageError = ""
@@ -1009,6 +1011,29 @@ class PetService : Service() {
     /* ================= 连线自愈：桌宠网页断线就重载 ================= */
 
     /** 每 8 秒看一眼桌宠 socket；连续两次（约 16 秒）断着就重载网页，最多 20 秒重载一次。 */
+    /** 心跳里顺带探一次页面：动画是否还在跑、她还在不在、她多大。 */
+    private fun probePage() {
+        val w = web_ ?: return
+        try {
+            // 先读上一次探测的结果（rAF 是异步的，隔一拍才拿得到）
+            w.evaluateJavascript("window.__dshProbe || 'none'") { r ->
+                animOk_ = r != null && r.contains("ok")
+            }
+            // 再下一个新探测 + 取她的位置尺寸
+            w.evaluateJavascript(
+                "(function(){window.__dshProbe='pending';" +
+                    "try{requestAnimationFrame(function(){window.__dshProbe='ok';});}catch(e){}" +
+                    "var p=document.getElementById('pet');if(!p)return 'nopet';" +
+                    "var r=p.getBoundingClientRect();" +
+                    "return Math.round(r.left)+','+Math.round(r.top)+' size '+Math.round(r.width)+'x'+Math.round(r.height);})()"
+            ) { r2 ->
+                val s = (r2 ?: "").trim('"')
+                petRect_ = if (s.contains("nopet")) "她不存在!" else s
+            }
+        } catch (_: Exception) {
+        }
+    }
+
     private val linkWatch = object : Runnable {
         override fun run() {
             val s = server
@@ -1025,6 +1050,7 @@ class PetService : Service() {
                     }
                 }
             }
+            probePage()
             handler.postDelayed(this, 8000)
         }
     }
@@ -1072,6 +1098,9 @@ class PetService : Service() {
     /** 供 App 显示：桌宠网页还连着吗。 */
     fun isPetAlive(): Boolean = server?.isPetConnected() == true
 
+    /** 供诊断：最近日志（含页面 console）。 */
+    fun logTail(n: Int): String = try { server?.logTail(n) ?: "(无)" } catch (e: Exception) { "(读不到)" }
+
     /** 供诊断：桌宠网页当前状态。 */
 
     /** 动作标记自检：点一下就能看出【】/< 两种标记有没有生效。 */
@@ -1084,6 +1113,8 @@ class PetService : Service() {
         val w = web_ ?: return "网页: 未创建"
         return try {
             "网页: " + (w.url ?: "?") + " | 进度 " + w.progress + "%" +
+                " | 她的位置尺寸: " + petRect_ +
+                " | 她的动画: " + (animOk_?.let { if (it) "正常" else "停了!" } ?: "未知") +
                 " | WebGL2: " + (webgl2Ok?.let { if (it) "可用" else "不可用!" } ?: "未检测") +
                 (if (lastPageError.isNotEmpty()) " | 最近错误: " + lastPageError else "")
         } catch (e: Exception) {

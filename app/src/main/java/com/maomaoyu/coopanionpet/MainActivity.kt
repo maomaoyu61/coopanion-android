@@ -447,6 +447,7 @@ class MainActivity : Activity() {
                     sb.append("TTS: " + (if (prefs.getBoolean("tts_ok", false)) "就绪" else "未知") + nl)
                     sb.append((PetService.instance?.pageInfo() ?: "网页: 服务未运行") + nl)
                     sb.append("电脑联动(DSH播报器): " + (dshStateLabel?.text ?: "未知") + nl)
+                    sb.append("最近日志: " + (PetService.instance?.logTail(4) ?: "(服务未运行)") + nl)
                     val cm = getSystemService(android.content.ClipboardManager::class.java)
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("diag", sb.toString()))
                     toast("诊断信息已复制，粘贴发给开发者即可")
