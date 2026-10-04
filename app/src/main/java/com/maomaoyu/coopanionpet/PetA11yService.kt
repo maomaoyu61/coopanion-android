@@ -206,6 +206,23 @@ class PetA11yService : AccessibilityService() {
     }
 
     /** 按应用名（中文/英文/包名）打开。 */
+    /** 常见应用的中文名 → 包名（包可见性受限时的兜底）。 */
+    private val ALIAS = mapOf(
+        "微信" to "com.tencent.mm", "wechat" to "com.tencent.mm",
+        "qq" to "com.tencent.mobileqq", "腾讯qq" to "com.tencent.mobileqq",
+        "设置" to "com.android.settings", "相机" to "com.android.camera",
+        "相册" to "com.miui.gallery", "图库" to "com.miui.gallery",
+        "浏览器" to "com.android.browser", "时钟" to "com.android.deskclock",
+        "日历" to "com.android.calendar", "计算器" to "com.android.calculator2",
+        "音乐" to "com.miui.player", "视频" to "com.miui.video",
+        "地图" to "com.baidu.BaiduMap", "淘宝" to "com.taobao.taobao",
+        "哔哩哔哩" to "tv.danmaku.bili", "b站" to "tv.danmaku.bili",
+        "抖音" to "com.ss.android.ugc.aweme", "知乎" to "com.zhihu.android",
+        "微博" to "com.sina.weibo", "番茄小说" to "com.dragon.read",
+        "记事本" to "com.android.notes", "文件管理" to "com.android.documentsui"
+    )
+
+    /** 按应用名（中文/英文/包名）打开。 */
     fun openApp(nameOrPkg: String): Boolean {
         val want0 = nameOrPkg.trim()
         if (PetSafety.deniedApp(want0, want0)) {
@@ -214,25 +231,35 @@ class PetA11yService : AccessibilityService() {
         }
         val want = want0
         if (want.isEmpty()) return false
-        // 先当包名试
-        val direct = packageManager.getLaunchIntentForPackage(want)
-        if (direct != null) {
-            direct.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-            return try { startActivity(direct); true } catch (e: Exception) { false }
+
+        fun launch(pkg: String): Boolean {
+            val i = packageManager.getLaunchIntentForPackage(pkg) ?: return false
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            return try { startActivity(i); true } catch (e: Exception) { false }
         }
-        // 再按应用名匹配
-        val pm = packageManager
-        val main = android.content.Intent(android.content.Intent.ACTION_MAIN)
-            .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
-        val list = pm.queryIntentActivities(main, 0)
-        for (ri in list) {
-            val label = ri.loadLabel(pm).toString()
-            val pkg = ri.activityInfo.packageName
-            if (label.equals(want, true) || label.contains(want) || pkg.equals(want, true)) {
-                val i = pm.getLaunchIntentForPackage(pkg) ?: continue
-                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                return try { startActivity(i); true } catch (e: Exception) { false }
+
+        // ① 先当包名试
+        if (launch(want)) return true
+        // ② 别名表
+        ALIAS[want.lowercase()]?.let { if (launch(it)) return true }
+        ALIAS[want]?.let { if (launch(it)) return true }
+        // ③ 查所有可启动应用，按名字匹配
+        try {
+            val pm = packageManager
+            val main = android.content.Intent(android.content.Intent.ACTION_MAIN)
+                .addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+            val list = pm.queryIntentActivities(main, 0)
+            PetService.instance?.server?.log("openApp: 查到 " + list.size + " 个可启动应用")
+            var fuzzy: String? = null
+            for (ri in list) {
+                val label = ri.loadLabel(pm).toString()
+                val pkg = ri.activityInfo.packageName
+                if (label.equals(want, true)) return launch(pkg)
+                if (fuzzy == null && (label.contains(want) || pkg.equals(want, true))) fuzzy = pkg
             }
+            if (fuzzy != null) return launch(fuzzy)
+        } catch (e: Exception) {
+            PetService.instance?.server?.log("openApp 出错: " + e.javaClass.simpleName)
         }
         return false
     }

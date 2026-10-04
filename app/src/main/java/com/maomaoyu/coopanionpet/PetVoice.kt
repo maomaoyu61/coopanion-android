@@ -24,9 +24,31 @@ class PetVoice(private val ctx: Context) {
 
     fun isRunning() = running
 
+    private fun log(s: String) { PetService.instance?.server?.log("语音口令: " + s) }
+
     fun start() {
         if (running) return
+        // 先自查：有没有识别服务、有没有录音权限 —— 不然用户只会看到"没反应"
+        try {
+            val avail = SpeechRecognizer.isRecognitionAvailable(ctx)
+            val mic = ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+            log("启动自查 → 识别服务=" + (if (avail) "有" else "没有 ✗") + "，录音权限=" + (if (mic) "有" else "没有 ✗"))
+            if (!avail) {
+                PetService.instance?.say("这台手机没有语音识别服务，我开不了免手模式（试试用输入法的麦克风打字给我）")
+                running = false
+                return
+            }
+            if (!mic) {
+                PetService.instance?.say("还没有麦克风权限，去 App 里给一下")
+                running = false
+                return
+            }
+        } catch (e: Exception) {
+            log("自查出错: " + e.javaClass.simpleName)
+        }
         running = true
+        log("开始监听（口令词：大肥鱼）")
         listenOnce()
     }
 
@@ -47,6 +69,7 @@ class PetVoice(private val ctx: Context) {
                 override fun onResults(results: Bundle?) {
                     val list = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     val text = list?.firstOrNull()?.trim().orEmpty()
+                    log("听到：" + text)
                     if (text.isNotEmpty()) {
                         val cmd = PetCmd.stripWake(text)
                         if (cmd != null) {
@@ -59,6 +82,7 @@ class PetVoice(private val ctx: Context) {
                 }
 
                 override fun onError(error: Int) {
+                    log("识别出错 code=" + error)
                     if (running) handler.postDelayed({ listenOnce() }, 1500)
                 }
 
@@ -66,7 +90,7 @@ class PetVoice(private val ctx: Context) {
                 override fun onBeginningOfSpeech() {}
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {}
+                override fun onEndOfSpeech() { log("说完了一句") }
                 override fun onPartialResults(partialResults: Bundle?) {}
                 override fun onEvent(eventType: Int, params: Bundle?) {}
             })
