@@ -576,10 +576,6 @@ class MainActivity : Activity() {
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        refreshSelfCheck()
-    }
 
     /* ---------- 小工具 ---------- */
 
@@ -745,6 +741,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         dshStateLabel?.let { refreshDsh() }
+        refreshSelfCheck()
     }
 
     private fun toast(msg: String) {
