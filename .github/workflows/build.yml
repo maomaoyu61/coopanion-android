@@ -45,6 +45,22 @@ jobs:
           cp -r "$SRC" app/src/main/assets/web
           echo "asset files: $(find app/src/main/assets/web -type f | wc -l)"
 
+      # ★ 老 WebView（Chromium < 80）不认 ?. / ?? / ??= / #private 这些现代语法，
+      #   一旦语法错整个 JS 模块都不执行（表现：模型消失 + WebSocket 不连）。
+      #   这里在构建期用 esbuild 把网页 JS 统一降级到 chrome70 能跑的语法。
+      - name: Downlevel web assets for old WebViews
+        run: |
+          set -e
+          n=0
+          for f in $(find app/src/main/assets/web -name *.js); do
+            npx --yes esbuild@0.21.5 "$f" --target=chrome70 --outfile="$f.out" --log-level=error
+            mv "$f.out" "$f"
+            n=$((n+1))
+          done
+          echo "downleveled $n js files"
+          echo "剩余现代语法检查:"
+          grep -rlE "\?\?=|\|\|=|&&=" app/src/main/assets/web --include=*.js || echo "  none (??=/||=/&&=)"
+
       - name: Install Gradle 8.7
         run: |
           curl -sSL -o gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
