@@ -118,6 +118,8 @@ class PetService : Service() {
     private var pendingTapCode: String? = null
     private var longPressX = 0f
     private var longPressY = 0f
+    /** 拖动中：窗口只跟手指，不接受网页回传的位置驱动（见 applyPetPos）。 */
+    private var midDragging = false
 
     /** 单击延时处理：给双击留出判定窗口。 */
     private val tapTick = Runnable {
@@ -602,6 +604,7 @@ class PetService : Service() {
                     if (!midMoved &&
                         (abs(ev.rawX - midDownX) > slop || abs(ev.rawY - midDownY) > slop)) {
                         midMoved = true
+                        midDragging = true
                         handler.removeCallbacks(longPressTick)
                         server?.log("交互层：拎起桌宠")
                         // 让网页进入她自己的拖拽状态（暂停自由走动 + 换成被拎的姿势）。
@@ -635,6 +638,7 @@ class PetService : Service() {
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     handler.removeCallbacks(moveTick)
                     movePending = false
+                    midDragging = false
                     if (midMoved) {
                         val sc = cssScale()
                         val pp = midParams_
@@ -1046,7 +1050,10 @@ class PetService : Service() {
         val sc = if (lastVp > 1f) sw / lastVp else dm.density
 
         // ① 交互层：跟着她走，永远盖在她身上（这块是唯一接收触摸的区域）
-        val mv = mid_
+        //    ★ 但拖动中窗口**只归手指管**（ACTION_MOVE 里直接平移）。拖动时她画在哪
+        //      和网页报来的包围盒不是一回事（pet.dx/dy 与 pet.x/fy 不同坐标系），
+        //      两边同时驱动会互相打架、把窗口推飞。
+        val mv = if (midDragging) null else mid_
         val mp = midParams_
         if (mv != null && mp != null) {
             // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。

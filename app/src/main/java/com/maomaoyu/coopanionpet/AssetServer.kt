@@ -568,12 +568,10 @@ class AssetServer(private val ctx: Context) {
                     "if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}}" +
                     "if(x1<x0||y1<y0){abCache=null;abAt=now;return null;}" +
                     "var sr=s.getBoundingClientRect(),k=sr.width/W;" +
-                    // ★ 拖动中她的视觉位置 = 逻辑位置 + 视觉偏移(pet.dx/dy)。
-                    //   窗口必须跟着**视觉**位置走，否则拖动时窗口会和她的身体脱钩，
-                    //   手指所在的"窗口内坐标"越算越偏 → 正反馈 → 越拖越飞。
-                    "var offX=0,offY=0;" +
-                    "try{var c2=window.__dshPet&&window.__dshPet.ctl;if(c2&&c2.pet&&c2.pet.mode==='drag'){offX=(c2.pet.dx-c2.pet.x)||0;offY=(c2.pet.dy-c2.pet.fy)||0;}}catch(e){}" +
-                    "abCache=[sr.left+x0*k+offX,sr.top+y0*k+offY,(x1-x0+1)*k,(y1-y0+1)*k];abAt=now;return abCache;}" +
+                    // 注意：这里**不要**去加 (pet.dx-pet.x) 之类的"视觉偏移"——
+                    // pet.dx/dy 与 pet.x/fy 不在同一套坐标里（实测相减会得到 -833 这种量，
+                    // 直接把窗口推出屏幕，并形成正反馈让她越拖越飞）。
+                    "abCache=[sr.left+x0*k,sr.top+y0*k,(x1-x0+1)*k,(y1-y0+1)*k];abAt=now;return abCache;}" +
                     "})()</script>"
                 val noHover = "<style>#tools{display:none !important;}</style>"
                 // 气泡样式：默认只用原生气泡（灰），把网页那个白气泡藏掉，避免两个重叠
