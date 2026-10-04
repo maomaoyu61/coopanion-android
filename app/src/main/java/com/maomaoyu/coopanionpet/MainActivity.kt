@@ -299,7 +299,7 @@ class MainActivity : Activity() {
         val dshStateLabel = TextView(this).apply {
             textSize = 13f
             setTextColor(0xFF4759AD.toInt())
-            text = "DSH 播报器：检查中…"
+            text = "电脑联动：检查中…"
         }
         this.dshStateLabel = dshStateLabel
         val swLink = CheckBox(this).apply {
@@ -446,7 +446,7 @@ class MainActivity : Activity() {
                     sb.append("桌宠连线: " + (if (PetService.instance?.isPetAlive() == true) "正常" else "断开") + nl)
                     sb.append("TTS: " + (if (prefs.getBoolean("tts_ok", false)) "就绪" else "未知") + nl)
                     sb.append((PetService.instance?.pageInfo() ?: "网页: 服务未运行") + nl)
-                    sb.append("DSH 播报器: " + (dshStateLabel?.text ?: "未知") + nl)
+                    sb.append("电脑联动(DSH播报器): " + (dshStateLabel?.text ?: "未知") + nl)
                     val cm = getSystemService(android.content.ClipboardManager::class.java)
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("diag", sb.toString()))
                     toast("诊断信息已复制，粘贴发给开发者即可")
@@ -489,7 +489,7 @@ class MainActivity : Activity() {
                 "\n【出问题怎么办】\n" +
                 "• 「④ 陪伴 → 复制诊断信息」→ 把那段文字发我，我就能远程定位问题\n" +
                 "• 她整个身体靠 WebGL2 渲染；若头发/身体缺失，先去应用商店更新「Android System WebView」\n" +
-                "• 状态条不动了＝DSH 里那个播报器停了，跟我说一声就行"))
+                "• 头顶/脚边那条状态条，只在电脑联动跑着时才有内容；没内容不影响任何功能（想修就跟我说一声）"))
         })
 
         setContentView(ScrollView(this).apply { addView(col) },
@@ -628,7 +628,7 @@ class MainActivity : Activity() {
     /** 探测 DSH 状态播报器是否在跑（它决定她能不能跟着我干活变脸）。 */
     private fun refreshDsh() {
         val label = dshStateLabel ?: return
-        label.text = "DSH 播报器：检查中…"
+        label.text = "电脑联动：检查中…"
         Thread({
             val msg = try {
                 val c = (java.net.URL("http://127.0.0.1:8755/").openConnection()
@@ -639,12 +639,12 @@ class MainActivity : Activity() {
                 c.disconnect()
                 val o = org.json.JSONObject(txt)
                 when (o.optString("state")) {
-                    "idle" -> "DSH 播报器：已连接 ✓（我闲着）"
-                    "done" -> "DSH 播报器：已连接 ✓（刚干完一轮）"
-                    else -> "DSH 播报器：已连接 ✓（" + o.optString("text") + "）"
+                    "idle" -> "电脑联动：已连接 ✓（闲着）"
+                    "done" -> "电脑联动：已连接 ✓（刚干完一轮）"
+                    else -> "电脑联动：已连接 ✓（" + o.optString("text") + "）"
                 }
             } catch (e: Exception) {
-                "DSH 播报器：未连接 ✗（跟我说一声，或重启一次 DSH 即可）"
+                "电脑联动：未连接（不影响聊天 / 摸头 / 装扮，可以不管）"
             }
             runOnUiThread { label.text = msg }
             runOnUiThread {
