@@ -405,6 +405,13 @@ class MainActivity : Activity() {
                     override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
                 }
             })
+            addView(pill("恢复显示状态条（如果它被收起了）", false) {
+                prefs.edit().putString("status_pos", "feet")
+                    .putBoolean("status_hidden", false)
+                    .apply()
+                PetService.instance?.applyStatusPlacement()
+                toast("状态条已恢复到屏幕底部")
+            })
             addView(dshStateLabel)
             addView(pill("重新检测 DSH 连接", false) { refreshDsh() })
             addView(affLabel)
