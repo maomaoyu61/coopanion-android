@@ -1157,8 +1157,9 @@ class PetService : Service() {
         val want = !isImeVisible()
         if (want == lastTouchable) return
         lastTouchable = want
-        mv.flags = if (want) mv.flags and android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-                   else mv.flags or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        // 注意：flags 在 LayoutParams 上（mp），不是 View（mv）上
+        val f = android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        mp.flags = if (want) mp.flags and f.inv() else mp.flags or f
         try { wm_?.updateViewLayout(mv, mp) } catch (_: Exception) {}
         server?.log(if (want) "交互层：键盘收起，恢复可触摸" else "交互层：键盘弹出，让开触摸")
     }
