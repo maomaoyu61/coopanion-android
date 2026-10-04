@@ -261,7 +261,7 @@ class MainActivity : Activity() {
             addView(android.widget.Spinner(this@MainActivity).apply {
                 adapter = android.widget.ArrayAdapter(this@MainActivity,
                     android.R.layout.simple_spinner_dropdown_item,
-                    listOf("只显示网页气泡（推荐）", "只显示原生气泡（我的·白）", "两个都要"))
+                    listOf("只显示网页气泡（推荐）", "只显示原生气泡（自带·白）", "两个都要"))
                 // 默认 = 网页气泡（更流畅）
                 val curB = prefs.getString("bubble_mode", "page")
                 setSelection(if (curB == "native") 1 else if (curB == "both") 2 else 0)
@@ -479,7 +479,7 @@ class MainActivity : Activity() {
                 "\n【气泡与状态条】\n" +
                 "• 气泡样式在「③ 外观」里选，「只显示网页气泡」最流畅（默认）\n" +
                 "• 状态条可以直接拖到任意位置，轻点它收起；「④ 陪伴」里也能切 脚下 / 头顶 / 不显示\n" +
-                "• 状态条内容来自 DSH（我干活时的任务和用时），我这边没在跑时它不显示\n" +
+                "• 状态条内容来自电脑端联动（显示当前任务和用时）；电脑端没跑时它不显示\n" +
                 "\n【没填 API Key 也能玩】\n" +
                 "• 内置离线台词库，她会用预设台词回应；想 AI 聊天就在「② 聊天设置」填自己的 Key\n" +
                 "• 换配色 / 换形象：点上面的「装扮」，那是原版页面，最全\n" +
@@ -487,7 +487,7 @@ class MainActivity : Activity() {
                 "• 点上面的「后台保活」+「应用详情」→ 打开自启动、省电策略设成「无限制」\n" +
                 "• Android 13 以上记得允许通知\n" +
                 "\n【出问题怎么办】\n" +
-                "• 「④ 陪伴 → 复制诊断信息」→ 把那段文字发我，我就能远程定位问题\n" +
+                "• 「④ 陪伴 → 复制诊断信息」→ 把那段文字发给开发者，就能远程定位问题\n" +
                 "• 她整个身体靠 WebGL2 渲染；若头发/身体缺失，先去应用商店更新「Android System WebView」\n" +
                 "• 那条状态条是开发者功能，只在电脑端联动跑着时才有内容；没内容不影响任何功能，也不用告诉谁 —— 断了自己会恢复（重启一次 DSH 即可）"))
         })
