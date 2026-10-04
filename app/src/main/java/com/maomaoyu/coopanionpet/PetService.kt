@@ -867,6 +867,10 @@ class PetService : Service() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                // ★ 必须不可触摸：这个气泡有 0.62 屏宽、还跟着她走，
+                //   之前它把她周围一大片触摸全吃掉了（表现为"只有某些点能摸到她"）。
+                //   这是纯显示的气泡，本来就不需要接收触摸。
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -1157,6 +1161,8 @@ class PetService : Service() {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                // ★ 同气泡：纯显示的陪伴状态条，别吃触摸（它会跟着她，挡住交互层）
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         ).apply {

@@ -521,12 +521,29 @@ class AssetServer(private val ctx: Context) {
                     "if(ts-last>60||window.__dshPet&&window.__dshPet.pt){last=ts;" +
                     "var r=e.getBoundingClientRect();" +
                     "var x=Math.round(r.left),y=Math.round(r.top),w=Math.round(r.width),h=Math.round(r.height);" +
+                    // ★ 她实际画出来的范围＝交互层必须盖住的范围。用画布 alpha 的真实包围盒来定位，
+                    //   否则窗口会按 #pet 的包围盒偏到别处（实测：触点在正中/偏上才有反应）。
+                    "try{var ab=alphaBounds();if(ab&&ab[2]>2&&ab[3]>2){x=Math.round(ab[0]);y=Math.round(ab[1]);w=Math.round(ab[2]);h=Math.round(ab[3]);}}catch(err){}" +
                     "if(Math.abs(x-lx)>2||Math.abs(y-ly)>2||w!==lw||h!==lh){lx=x;ly=y;lw=w;lh=h;" +
                     "if(window.AndroidPet&&window.AndroidPet.pos){" +
                     "try{if(window.AndroidPet.vp)window.AndroidPet.vp(window.innerWidth);}catch(err){}" +
                     "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
                     "window.requestAnimationFrame(tick);}" +
-                    "window.requestAnimationFrame(tick);})()</script>"
+                    "window.requestAnimationFrame(tick);" +
+                    // alpha 包围盒：每秒最多算一次（整张画布扫一遍 alpha 有点贵，不能每帧做）
+                    "var abAt=0,abCache=null;" +
+                    "function alphaBounds(){var now=performance.now();if(abCache&&now-abAt<900)return abCache;" +
+                    "var s=document.querySelector('#pet canvas');if(!s||!s.width)return null;" +
+                    "var o=document.createElement('canvas');o.width=s.width;o.height=s.height;" +
+                    "var c=o.getContext('2d');c.clearRect(0,0,o.width,o.height);c.drawImage(s,0,0);" +
+                    "var d=c.getImageData(0,0,o.width,o.height).data,W=o.width,H=o.height;" +
+                    "var x0=W,y0=H,x1=-1,y1=-1;" +
+                    "for(var y=0;y<H;y++){var row=y*W;for(var x=0;x<W;x++){if(d[(row+x)*4+3]>24){" +
+                    "if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;}}}" +
+                    "if(x1<x0||y1<y0){abCache=null;abAt=now;return null;}" +
+                    "var sr=s.getBoundingClientRect(),k=sr.width/W;" +
+                    "abCache=[sr.left+x0*k,sr.top+y0*k,(x1-x0+1)*k,(y1-y0+1)*k];abAt=now;return abCache;}" +
+                    "})()</script>"
                 val noHover = "<style>#tools{display:none !important;}</style>"
                 // 气泡样式：默认只用原生气泡（灰），把网页那个白气泡藏掉，避免两个重叠
                 val bubbleCss = if (prefs.getString("bubble_mode", "page") == "native")
