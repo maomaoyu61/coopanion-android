@@ -14,6 +14,51 @@ class Brain(private val ctx: Context) {
 
     private val prefs = ctx.getSharedPreferences("pet", Context.MODE_PRIVATE)
 
+    /** 干活专用：不带情绪人设，只让它输出一行 JSON 动作。 */
+    /** 干活专用：不带情绪人设，只让它输出一行 JSON 动作。 */
+    fun agentStep(system: String, user: String): String? {
+        var key = prefs.getString("api_key", "").orEmpty().trim()
+        var rawBase = prefs.getString("api_base", "").orEmpty().trim()
+        if (key.isEmpty() && rawBase.startsWith("sk-")) { key = rawBase; rawBase = "" }
+        if (key.isEmpty()) return null
+        var base = rawBase.trimEnd('/')
+        if (base.isNotEmpty() && !base.startsWith("http")) base = "https://" + base
+        if (!base.startsWith("http")) base = DEFAULT_BASE
+        val model = prefs.getString("api_model", "").orEmpty().trim().ifEmpty { DEFAULT_MODEL }
+        val payload = JSONObject().apply {
+            put("model", model)
+            put("messages", JSONArray().apply {
+                put(JSONObject().put("role", "system").put("content", system))
+                put(JSONObject().put("role", "user").put("content", user))
+            })
+            put("temperature", 0.2)
+            put("max_tokens", 200)
+        }
+        var conn: HttpURLConnection? = null
+        return try {
+            conn = (URL("$base/chat/completions").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 20000
+                readTimeout = 45000
+                doOutput = true
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                setRequestProperty("Authorization", "Bearer $key")
+            }
+            conn.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
+            val code = conn.responseCode
+            val txt = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                ?.bufferedReader()?.use { it.readText() } ?: ""
+            logCb?.invoke("agent: code=" + code + " model=" + model)
+            if (code !in 200..299) null
+            else JSONObject(txt).optJSONArray("choices")?.optJSONObject(0)
+                ?.optJSONObject("message")?.optString("content")
+        } catch (e: Exception) {
+            logCb?.invoke("agent 出错: " + e.javaClass.simpleName)
+            null
+        } finally {
+            try { conn?.disconnect() } catch (_: Exception) {}
+        }
+    }
     fun configured(): Boolean = !prefs.getString("api_key", "").isNullOrBlank()
 
     fun clearMemory() {

@@ -154,6 +154,12 @@ class MainActivity : Activity() {
                     if (c) toast("已开启：对着手机说「大肥鱼，帮我打开微信」试试")
                 }
             })
+            addView(CheckBox(this@MainActivity).apply {
+                text = "AI 自主操作（多步任务，如「大肥鱼帮我打开微信给张三发消息」）"
+                textSize = 13f
+                isChecked = prefs.getBoolean("ai_agent", false)
+                setOnCheckedChangeListener { _, c -> prefs.edit().putBoolean("ai_agent", c).apply() }
+            })
             addView(pill("通知权限设置", false) {
                 val i = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
                 i.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)

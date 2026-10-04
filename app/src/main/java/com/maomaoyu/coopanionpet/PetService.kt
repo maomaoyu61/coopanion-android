@@ -171,7 +171,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v4.2 ===")
+        s.log("=== PetService 启动 v4.3 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -1234,6 +1234,21 @@ class PetService : Service() {
                     return
                 }
             } catch (_: Exception) {
+            }
+        }
+        // 带了口令词但单步指令没命中 → 交给 AI 边看屏幕边多步执行（需显式开启）
+        if (petPrefs().getBoolean("ai_agent", false) && PetA11yService.alive()) {
+            val task = PetCmd.stripWake(text)
+            if (task != null && task.length >= 2) {
+                lastUserAt = System.currentTimeMillis()
+                say("好，我来试试…")
+                Thread({
+                    val r = try {
+                        PetAgent.run(task) { step -> handler.post { say(step) } }
+                    } catch (e: Exception) { "我卡住了…" }
+                    handler.post { say(r) }
+                }, "petagent").start()
+                return
             }
         }
         // 没填 API Key（或断网）时用离线台词库，别让她只能发呆
