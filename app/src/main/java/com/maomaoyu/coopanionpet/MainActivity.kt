@@ -87,11 +87,11 @@ class MainActivity : Activity() {
         // ── 权限与启动 ──
         col.addView(section("① 权限与启动"))
         col.addView(card().apply {
-            addView(TextView(this).apply {
+            addView(TextView(this@MainActivity).apply {
                 id = 9001
                 textSize = 13f
                 setTextColor(0xFF4759AD.toInt())
-                setPadding(0, (d * 6).toInt(), 0, (d * 6).toInt())
+                setPadding(0, (resources.displayMetrics.density * 6).toInt(), 0, (resources.displayMetrics.density * 6).toInt())
             })
             addView(pill("授予悬浮窗权限", false) {
                 // 各家 ROM 的这个页面不一样，逐级降级
