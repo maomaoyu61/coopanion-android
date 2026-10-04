@@ -489,7 +489,7 @@ class MainActivity : Activity() {
                 "\n【出问题怎么办】\n" +
                 "• 「④ 陪伴 → 复制诊断信息」→ 把那段文字发我，我就能远程定位问题\n" +
                 "• 她整个身体靠 WebGL2 渲染；若头发/身体缺失，先去应用商店更新「Android System WebView」\n" +
-                "• 头顶/脚边那条状态条，只在电脑联动跑着时才有内容；没内容不影响任何功能（想修就跟我说一声）"))
+                "• 那条状态条是开发者功能，只在电脑端联动跑着时才有内容；没内容不影响任何功能，也不用告诉谁 —— 断了自己会恢复（重启一次 DSH 即可）"))
         })
 
         setContentView(ScrollView(this).apply { addView(col) },
@@ -644,7 +644,7 @@ class MainActivity : Activity() {
                     else -> "电脑联动：已连接 ✓（" + o.optString("text") + "）"
                 }
             } catch (e: Exception) {
-                "电脑联动：未连接（不影响聊天 / 摸头 / 装扮，可以不管）"
+                "电脑联动：未连接（开发者功能，重启一次 DSH 会自动恢复；其他人忽略即可）"
             }
             runOnUiThread { label.text = msg }
             runOnUiThread {
