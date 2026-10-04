@@ -677,8 +677,8 @@ class PetService : Service() {
                         val lx = fmt(ev.rawX - (pp?.x ?: 0))
                         val ly = fmt(ev.rawY - (pp?.y ?: 0))
                         val nowMs = System.currentTimeMillis()
-                        val isDouble = nowMs - lastTapAt < 320 &&
-                            Math.hypot((ev.rawX - lastTapX).toDouble(), (ev.rawY - lastTapY).toDouble()) < dens * 45
+                        val isDouble = nowMs - lastTapAt < 420 &&
+                            Math.hypot((ev.rawX - lastTapX).toDouble(), (ev.rawY - lastTapY).toDouble()) < dens * 60
                         if (isDouble) {
                             // 双击：和非穿透模式保持一致 —— 走**我们自己**的输入条（showChatInput），
                             // 不是网页气泡里那个输入框。同时取消"等一下再当单击处理"的延时。
@@ -1082,7 +1082,8 @@ class PetService : Service() {
         if (mv != null && mp != null) {
             // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。
             // 别按 density 去乘尺寸 —— 那会让窗口比她还大好几倍。
-            val pad = (dm.density * 6).toInt()
+            // 内边距只留 2dp：窗口比她的像素范围大多少，那圈就是"点了没反应"的死区
+            val pad = (dm.density * 2).toInt()
             val w = (cw * sc).toInt() + pad * 2
             val h = (ch * sc).toInt() + pad * 2
             val x = (cx * sc).toInt() - pad

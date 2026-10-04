@@ -550,14 +550,28 @@ class AssetServer(private val ctx: Context) {
                     "return true;}catch(e){return false;}" +
                     "}" +
                     "p.down=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
+                    "var cur={x:a.x,y:a.y};" +
+                    "if(!p.ctl.hitPet(a)){var s=p.ctl.toStage(128,128),i=0,g=false,cx=a.x,cy=a.y;" +
+                    "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
+                    "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
+                    "if(g)cur={x:cx,y:cy};else return false;}" +
+                    // 她进拖拽时会被放到"抓取锚点"(比指尖高一点)。若指针就是指尖，
+                    // 她会每帧朝指尖移动 → 拖的时候不贴手。把这段差带进指针位置，
+                    // 指尖就一直对应她被抓住的那一点。
+                    "var sc=p.ctl.toStage(128,36);" +
+                    "p.off={x:sc.x-cur.x,y:sc.y-cur.y};" +
+                    "ptr('pointerdown',{x:cur.x+p.off.x,y:cur.y+p.off.y},1);" +
+                    "return true;};" +
+                    "p.move=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
+                    "if(p.off){a.x+=p.off.x;a.y+=p.off.y;}" +
+                    "return ptr('pointermove',a,1);};" +
+                    "p.up=function(lx,ly){if(!p.can())return false;return ptr('pointerup',ui(lx,ly),0);};" +
+                    "p.tap=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
+                    // 和 down 一样做命中容错：否则只有"正好戳中她身体"的那一小块才有反应
                     "if(!p.ctl.hitPet(a)){var s=p.ctl.toStage(128,128),i=0,g=false,cx=a.x,cy=a.y;" +
                     "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
                     "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
                     "if(g)a={x:cx,y:cy};else return false;}" +
-                    "return ptr('pointerdown',a,1);};" +
-                    "p.move=function(lx,ly){if(!p.can())return false;return ptr('pointermove',ui(lx,ly),1);};" +
-                    "p.up=function(lx,ly){if(!p.can())return false;return ptr('pointerup',ui(lx,ly),0);};" +
-                    "p.tap=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
                     "ptr('pointerdown',a,1);ptr('pointerup',a,0);return true;};" +
                     // 双击/长按：页面那两个动作（输入框/菜单）没法靠合成事件触达
                     // （dblclick 被 killJs 吞掉），只能显式喊一次。
