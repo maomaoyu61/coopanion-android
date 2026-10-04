@@ -345,6 +345,24 @@ class AssetServer(private val ctx: Context) {
                         "background-color:transparent!important;background-image:none!important}" +
                         "body.tab{background:transparent!important;background-image:none!important}" +
                         "body.tab .floor{display:none!important}</style>"
+                // ★ 兼容性注入：
+                //  ① 把网页里的未捕获 JS 异常打到 console（→ 回传到 App 日志，诊断能看到）
+                //  ② WebGL2 context 拿不到时逐级降级重试（老 WebView / 弱 GPU 上带 antialias
+                //     等参数会直接失败，上游 rig.js 一失败就 throw，表现为"模型整个消失"）
+                val glShim = "<script>(function(){" +
+                    "window.addEventListener('error',function(e){try{console.error('[jsError] '+(e.message||'')+' @ '+String(e.filename||'').split('/').pop()+':'+(e.lineno||''));}catch(_){}},true);" +
+                    "window.addEventListener('unhandledrejection',function(e){try{console.error('[promise] '+((e.reason&&e.reason.message)||e.reason));}catch(_){}});" +
+                    "var orig=HTMLCanvasElement.prototype.getContext;" +
+                    "var tries=[{antialias:false,depth:true,stencil:true},{antialias:false,depth:false,stencil:false},{antialias:false,depth:false,stencil:false,preserveDrawingBuffer:false,failIfMajorPerformanceCaveat:false}];" +
+                    "HTMLCanvasElement.prototype.getContext=function(t,a){" +
+                    "if(t!=='webgl2'&&t!=='webgl')return orig.apply(this,arguments);" +
+                    "var r=null;try{r=orig.call(this,t,a);}catch(e){console.error('[glShim] '+t+' threw: '+e);}" +
+                    "if(r)return r;" +
+                    "console.error('[glShim] '+t+' 按原参数失败，开始降级重试');" +
+                    "for(var i=0;i<tries.length;i++){var x={};for(var k in tries[i])x[k]=tries[i][k];" +
+                    "if(a)for(var k2 in a)if(k2!=='antialias'&&k2!=='depth'&&k2!=='stencil')x[k2]=a[k2];" +
+                    "try{var rr=orig.call(this,t,x);if(rr){console.error('[glShim] '+t+' 降级成功('+i+')');return rr;}}catch(e2){}}" +
+                    "console.error('[glShim] '+t+' 完全不可用');return null;};})()</script>"
                 val hostJs = "<script>window.petHost=window.petHost||{" +
                     "setInteractive:function(){}," +
                     "focus:function(){}," +
