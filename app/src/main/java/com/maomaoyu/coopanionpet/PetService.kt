@@ -103,6 +103,7 @@ class PetService : Service() {
     /** 根（渲染）窗口相对屏幕的偏移：交互层的局部坐标 + 这个偏移 = 网页的页面坐标。 */
     private var pageOffX = 0
     private var pageOffY = 0
+    private var lastMidLogAt = 0L
     private var pendingLx = 0f
     private var pendingLy = 0f
     private var movePending = false
@@ -541,6 +542,7 @@ class PetService : Service() {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     midMoved = false
+                    server?.log("交互层 收到按下 (" + ev.rawX.toInt() + "," + ev.rawY.toInt() + ")")
                     midDownX = ev.rawX
                     midDownY = ev.rawY
                     midDownScreenY = ev.rawY
@@ -989,7 +991,9 @@ class PetService : Service() {
         val mv = mid_
         val mp = midParams_
         if (mv != null && mp != null) {
-            val pad = (dm.density * 10).toInt()
+            // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。
+            // 别按 density 去乘尺寸 —— 那会让窗口比她还大好几倍。
+            val pad = (dm.density * 6).toInt()
             val w = (cw * sc).toInt() + pad * 2
             val h = (ch * sc).toInt() + pad * 2
             val x = (cx * sc).toInt() - pad
@@ -1003,6 +1007,14 @@ class PetService : Service() {
                     mp.width = w
                     mp.height = h
                     try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
+                    // 自证日志：把交互层的真实矩形写出来（诊断"死区多大"时直接看这行）
+                    val nw = System.currentTimeMillis()
+                    if (nw - lastMidLogAt > 3000) {
+                        lastMidLogAt = nw
+                        val screeN = "屏幕 " + sw + "x" + sh
+                        server?.log("交互层 rect x=" + mx + " y=" + my + " " + w + "x" + h +
+                            " (她 " + (cw * sc).toInt() + "x" + (ch * sc).toInt() + " @" + (cx * sc).toInt() + "," + (cy * sc).toInt() + ", sc=" + (Math.round(sc * 100f) / 100f) + ") " + screeN)
+                    }
                 }
             }
         }
