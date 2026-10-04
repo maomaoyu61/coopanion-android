@@ -52,6 +52,8 @@ import kotlin.math.abs
 class PetService : Service() {
 
     private var web_: WebView? = null
+    private var port_: Int = 0
+    private var root_: FrameLayout? = null
     private var server: AssetServer? = null
     private var wm_: WindowManager? = null
     private var params_: WindowManager.LayoutParams? = null
@@ -290,6 +292,62 @@ class PetService : Service() {
         attachPet(s.port)
     }
 
+    /**
+     * 渲染进程被系统收走之后的自愈：**换一个全新的 WebView** 重新加载页面。
+     *
+     * 为什么不能只 reload()：进程已经死了，那个 WebView 实例再也画不出东西，
+     * evaluateJavascript 也永不回调。之前就是缺这一步，她一旦被系统收走渲染进程
+     * 就永久消失（而且 App 日志接口也不再应答，连诊断都进不去）。
+     */
+    private fun recoverWebView() {
+        val box = root_ ?: return
+        if (port_ <= 0) return
+        server?.log("重建桌宠网页：移除旧 WebView，新建一个")
+        try { web_?.let { box.removeView(it) } } catch (_: Exception) {}
+        try { web_?.destroy() } catch (_: Exception) {}
+        val web = PetWebView(this) { want -> setWindowFocusable(want) }.apply {
+            setBackgroundColor(0x00000000)
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.allowFileAccess = true
+            settings.allowContentAccess = true
+            if (Build.VERSION.SDK_INT >= 29) {
+                @Suppress("DEPRECATION")
+                settings.forceDark = WebSettings.FORCE_DARK_OFF
+            }
+            if (Build.VERSION.SDK_INT >= 33) {
+                settings.setAlgorithmicDarkeningAllowed(false)
+            }
+            try {
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
+            } catch (_: Exception) {
+            }
+            webChromeClient = object : android.webkit.WebChromeClient() {
+                override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                    server?.log("页面: " + m.message().take(180) + " @" + m.lineNumber())
+                    return true
+                }
+            }
+        }
+        web.addJavascriptInterface(JsBridge(), "AndroidPet")
+        web.loadUrl("http://127.0.0.1:$port_/web/pet.html?host=window")
+        try {
+            box.addView(web, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT))
+            web_ = web
+        } catch (e: Exception) {
+            server?.log("重建失败: " + e.message)
+        }
+        webgl2Ok = null
+        lastPageError = ""
+        loadRetries = 0
+        followPending = false
+        raiseBubble()
+        raiseButtons()
+    }
+
     private fun dimen(name: String): Int {
         val id = resources.getIdentifier(name, "dimen", "android")
         return if (id > 0) resources.getDimensionPixelSize(id) else 0
@@ -317,6 +375,7 @@ class PetService : Service() {
         }
         params_ = params
 
+        port_ = port
         val web = PetWebView(this) { want ->
             setWindowFocusable(want)
         }.apply {
@@ -350,7 +409,9 @@ class PetService : Service() {
                     detail: android.webkit.RenderProcessGoneDetail?
                 ): Boolean {
                     server?.log("⚠ 渲染进程被系统收走（didCrash=" + detail?.didCrash() + "）→ 重建桌宠网页")
-                    handler.postDelayed({ reloadPet() }, 800)
+                    // 渲染进程已经没了，web.reload() 是无效的 —— 必须换一个新的 WebView 才能自愈。
+                    // 之前没有这一步，所以她一被系统收走渲染进程就永久消失（"头没了"的那一幕）。
+                    handler.postDelayed({ recoverWebView() }, 800)
                     return true   // 返回 true：我们自己处理，别让整个 App 被一起干掉
                 }
                 // 她的骨架必须用 WebGL2：不支持时整块/局部渲染不出来（典型症状就是头发消失）
@@ -1746,8 +1807,6 @@ class PetService : Service() {
         try { mic_?.let { m -> wm.removeView(m); wm.addView(m, micParams_) } } catch (_: Exception) {}
         try { chat_?.let { c -> wm.removeView(c); wm.addView(c, chatParams_) } } catch (_: Exception) {}
     }
-
-    private var root_: FrameLayout? = null
 
     /** 触摸穿透开关：开着的时候手机正常用，关掉才能撸桌宠。 */
     fun togglePassthrough(): Boolean {
