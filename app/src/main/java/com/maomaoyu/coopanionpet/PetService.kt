@@ -108,12 +108,17 @@ class PetService : Service() {
     private var downScreenX = 0f
     private var downScreenY = 0f
     /** 根（渲染）窗口相对屏幕的偏移：交互层的局部坐标 + 这个偏移 = 网页的页面坐标。 */
+    private var lastHookOffX = Int.MIN_VALUE
+    private var lastHookOffY = Int.MIN_VALUE
     private var pageOffX = 0
     private var pageOffY = 0
     private var lastMidLogAt = 0L
     /** 把根窗口在屏幕上的偏移交给页面钩子：它负责把「窗口内像素」换成页面坐标。 */
-    private fun syncHookOffset() {
-        val code = "(function(){var h=window.__dshPet;if(h&&h.setOff)h.setOff(" + pageOffX + "," + pageOffY + ");return 1;})()"
+    private fun syncHookOffset(wx: Int = pageOffX, wy: Int = pageOffY) {
+        if (wx == lastHookOffX && wy == lastHookOffY) return
+        lastHookOffX = wx
+        lastHookOffY = wy
+        val code = "(function(){var h=window.__dshPet;if(h&&h.setOff)h.setOff(" + wx + "," + wy + ");return 1;})()"
         dispatchJs(code)
     }
     /** 双击/长按判定（穿透模式下页面收不到真实事件，只能在这边认）。 */
@@ -1062,6 +1067,9 @@ class PetService : Service() {
         //      两边同时驱动会互相打架、把窗口推飞。
         val mv = if (midDragging) null else mid_
         val mp = midParams_
+        // local → page 的锚点是**交互层窗口自己的屏幕位置**（不是根窗口偏移：
+        // 两者实际并不相等，用错就会出现"触摸参数 143,277 而她页面位置在 1089,2578"这种偏差）
+        if (mp != null) syncHookOffset(mp.x, mp.y)
         if (mv != null && mp != null) {
             // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。
             // 别按 density 去乘尺寸 —— 那会让窗口比她还大好几倍。
