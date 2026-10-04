@@ -54,9 +54,8 @@ class AssetServer(private val ctx: Context) {
 
     /** 记一条日志（同时供 /log 接口读取，方便在电脑/容器里排错）。 */
     /** 给诊断用：最近 n 条日志（含页面 console）。 */
-    fun logTail(n: Int): String = synchronized(logRing) {
-        val from = (logRing.size - n).coerceAtLeast(0)
-        logRing.subList(from, logRing.size).joinToString(" | ")
+    fun logTail(n: Int): String = synchronized(logs) {
+        if (logs.isEmpty()) "(无)" else logs.toList().takeLast(n).joinToString(" | ")
     }
 
     fun log(line: String) {
