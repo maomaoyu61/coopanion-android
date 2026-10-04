@@ -153,7 +153,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.38 ===")
+        s.log("=== PetService 启动 v3.39 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -830,6 +830,13 @@ class PetService : Service() {
                 MotionEvent.ACTION_UP -> {
                     if (!sMoved) {
                         view.visibility = android.view.View.GONE
+                        petPrefs().edit().putBoolean("status_hidden", true).apply()
+                        server?.log("状态条已被手动收起（在设置里切换位置可恢复）")
+                        android.widget.Toast.makeText(
+                            this@PetService,
+                            "状态条已收起，想恢复去「④ 陪伴 → 状态条位置」切一下",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                     } else {
                         petPrefs().edit()
                             .putString("status_pos", "custom")
@@ -850,6 +857,8 @@ class PetService : Service() {
 
     private fun showStatus(t: String) {
         val v = status_ ?: return
+        // 用户手动点收起了就别再弹出来（设置里切换位置可恢复）
+        if (petPrefs().getBoolean("status_hidden", false)) return
         if (v.text == t) return
         // ★ 只原地改文字：绝不能 removeView+addView（那是每秒一次的闪烁源）
         v.text = t
@@ -862,6 +871,10 @@ class PetService : Service() {
         val v = status_ ?: return
         val p = statusParams_ ?: return
         val mode = petPrefs().getString("status_pos", "feet")
+        if (petPrefs().getBoolean("status_hidden", false)) {
+            v.visibility = android.view.View.GONE
+            return
+        }
         if (mode == "off") {
             v.visibility = android.view.View.GONE
             return
