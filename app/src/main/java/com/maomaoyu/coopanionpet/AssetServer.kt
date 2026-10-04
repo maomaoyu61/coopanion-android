@@ -462,10 +462,10 @@ class AssetServer(private val ctx: Context) {
                 // 提到 75（每帧约 70%）跟手得多，又不会像 1:1 那样抖。
                 val d1 = d.replaceFirst(
                     "pet.dx = lerp(pet.dx, pointer.x, ease(28, dt));",
-                    "pet.dx = lerp(pet.dx, pointer.x, ease(75, dt));")
+                    "pet.dx = lerp(pet.dx, pointer.x, ease(160, dt));")
                 val d2 = d1.replaceFirst(
                     "pet.dy = lerp(pet.dy, Math.min(pointer.y, floorY - 245 * S), ease(28, dt));",
-                    "pet.dy = lerp(pet.dy, Math.min(pointer.y, floorY - 245 * S), ease(75, dt));")
+                    "pet.dy = lerp(pet.dy, Math.min(pointer.y, floorY - 245 * S), ease(160, dt));")
                 // 把页面自己的「双击弹输入框」「长按弹菜单」暴露出来：
                 // 穿透模式下页面收不到真实事件（dblclick 还被 killJs 吞了），
                 // 原生端必须能把这两个动作显式喊一次，两种模式才会表现一致。
@@ -555,16 +555,11 @@ class AssetServer(private val ctx: Context) {
                     "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
                     "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
                     "if(g)cur={x:cx,y:cy};else return false;}" +
-                    // 她进拖拽时会被放到"抓取锚点"(比指尖高一点)。若指针就是指尖，
-                    // 她会每帧朝指尖移动 → 拖的时候不贴手。把这段差带进指针位置，
-                    // 指尖就一直对应她被抓住的那一点。
-                    "var sc=p.ctl.toStage(128,36);" +
-                    "p.off={x:sc.x-cur.x,y:sc.y-cur.y};" +
-                    "ptr('pointerdown',{x:cur.x+p.off.x,y:cur.y+p.off.y},1);" +
+                    // ★ 指针就是手指那一点。她每帧朝指针收敛，所以她会一直跟在你手指下。
+                    //   （曾经在这里加过"抓取锚点差"，结果是她比手指高 39px，反而更不跟手。）
+                    "ptr('pointerdown',cur,1);" +
                     "return true;};" +
-                    "p.move=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
-                    "if(p.off){a.x+=p.off.x;a.y+=p.off.y;}" +
-                    "return ptr('pointermove',a,1);};" +
+                    "p.move=function(lx,ly){if(!p.can())return false;return ptr('pointermove',ui(lx,ly),1);};" +
                     "p.up=function(lx,ly){if(!p.can())return false;return ptr('pointerup',ui(lx,ly),0);};" +
                     "p.tap=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
                     // 和 down 一样做命中容错：否则只有"正好戳中她身体"的那一小块才有反应

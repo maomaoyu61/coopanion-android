@@ -111,6 +111,19 @@ class PetService : Service() {
     private var lastHookOffX = Int.MIN_VALUE
     private var lastHookOffY = Int.MIN_VALUE
     private var lastHookSc = -1f
+    /** 交互层当前是否可触摸（键盘弹出时会让开）。 */
+    private var lastTouchable = true
+    /** 我们自己弹的输入条（此时键盘必然在，不必再判断）。 */
+    private var imeUp = false
+
+    /** 系统输入法是否可见（我们自己的输入条打开时也算）。 */
+    private fun isImeVisible(): Boolean {
+        if (imeUp) return true
+        return try {
+            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.isAcceptingText
+        } catch (_: Exception) { false }
+    }
     private var pageOffX = 0
     private var pageOffY = 0
     private var lastMidLogAt = 0L
@@ -845,6 +858,8 @@ class PetService : Service() {
     /** 悬浮输入条：不再用 Activity，所以不会跳转到 App。 */
     private fun showChatInput() {
         val wm = wm_ ?: return
+        imeUp = true
+        syncTouchLayer()
         val dm = resources.displayMetrics
         if (input_ == null) {
             val bar = android.widget.LinearLayout(this).apply {
@@ -923,6 +938,8 @@ class PetService : Service() {
 
     private fun hideChatInput() {
         val wm = wm_ ?: return
+        imeUp = false
+        syncTouchLayer()
         setComposing(false)
         val v = input_ ?: return
         try { wm.removeView(v) } catch (_: Exception) {}
@@ -1076,6 +1093,7 @@ class PetService : Service() {
         //      两边同时驱动会互相打架、把窗口推飞。
         val mv = if (midDragging) null else mid_
         val mp = midParams_
+        syncTouchLayer()
         // local → page 的锚点是**交互层窗口自己的屏幕位置**（不是根窗口偏移：
         // 两者实际并不相等，用错就会出现"触摸参数 143,277 而她页面位置在 1089,2578"这种偏差）
         if (mp != null) syncHookOffset(mp.x, mp.y, sc)
@@ -1126,6 +1144,23 @@ class PetService : Service() {
         p.x = bx
         p.y = by
         try { wm.updateViewLayout(b, p) } catch (_: Exception) {}
+    }
+
+    /**
+     * 触摸层的可触摸性：键盘弹出时让开（它压在键盘"句号键"那一带，会吃掉按键），
+     * 键盘收起 / 我们自己的输入条关掉后恢复。拖动中不动（拖动本来就不该被打断）。
+     */
+    private fun syncTouchLayer() {
+        val mv = mid_ ?: return
+        val mp = midParams_ ?: return
+        if (midDragging) return
+        val want = !isImeVisible()
+        if (want == lastTouchable) return
+        lastTouchable = want
+        mv.flags = if (want) mv.flags and android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
+                   else mv.flags or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        try { wm_?.updateViewLayout(mv, mp) } catch (_: Exception) {}
+        server?.log(if (want) "交互层：键盘收起，恢复可触摸" else "交互层：键盘弹出，让开触摸")
     }
 
     /** 交互层只在"触摸穿透"时上岗：不穿透时整屏那层本来就归她，再加一层会互相抢。 */
