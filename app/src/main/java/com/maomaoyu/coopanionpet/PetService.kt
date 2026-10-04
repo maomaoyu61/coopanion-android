@@ -111,6 +111,11 @@ class PetService : Service() {
     private var pageOffX = 0
     private var pageOffY = 0
     private var lastMidLogAt = 0L
+    /** 把根窗口在屏幕上的偏移交给页面钩子：它负责把「窗口内像素」换成页面坐标。 */
+    private fun syncHookOffset() {
+        val code = "(function(){var h=window.__dshPet;if(h&&h.setOff)h.setOff(" + pageOffX + "," + pageOffY + ");return 1;})()"
+        dispatchJs(code)
+    }
     /** 双击/长按判定（穿透模式下页面收不到真实事件，只能在这边认）。 */
     private var lastTapAt = 0L
     private var lastTapX = 0f
@@ -133,8 +138,8 @@ class PetService : Service() {
         if (midMoved) return@Runnable
         val pp = midParams_ ?: return@Runnable
         val sc = cssScale()
-        val lx = fmt((longPressX - pp.x + pageOffX) / sc)
-        val ly = fmt((longPressY - pp.y + pageOffY) / sc)
+        val lx = fmt(longPressX - pp.x)
+        val ly = fmt(longPressY - pp.y)
         server?.log("交互层：长按她 → 菜单")
         dispatchJs("(function(){var h=window.__dshPet;if(h&&h.menu)h.menu($lx,$ly);})()")
     }
@@ -167,7 +172,7 @@ class PetService : Service() {
         movePending = false
         val code = "(function(){var h=window.__dshPet;" +
             "if(!h||!h.can())return;" +
-            "h.grabMove(${fmt(pendingLx)},${fmt(pendingLy)});})()"
+            "var pp=h.p;if(!pp)return;h.move(${fmt(pendingLx)},${fmt(pendingLy)});})()"
         dispatchJs(code)
     }
 
@@ -417,9 +422,10 @@ class PetService : Service() {
             y = statusBar
         }
         params_ = params
-        // 交互层喂给网页的坐标必须是"页面坐标"：根窗口在屏幕上的偏移就是页面原点
+        // 交互层喂给网页的坐标一律是「窗口内像素」，由页面钩子加上这个偏移换成页面坐标
         pageOffX = params.x
         pageOffY = params.y
+        syncHookOffset()
 
         port_ = port
         val web = PetWebView(this) { want ->
@@ -593,8 +599,8 @@ class PetService : Service() {
                     downScreenY = ev.rawY
                     lastScreenX = ev.rawX
                     lastScreenY = ev.rawY
-                    downLx = p2?.let { (ev.rawX - it.x + pageOffX) / sc } ?: 0f
-                    downLy = p2?.let { (ev.rawY - it.y + pageOffY) / sc } ?: 0f
+                    downLx = p2?.let { ev.rawX - it.x } ?: 0f
+                    downLy = p2?.let { ev.rawY - it.y } ?: 0f
                     lastMx = ev.rawX
                     lastMy = ev.rawY
                     lastMoveAt = System.currentTimeMillis()
@@ -612,7 +618,7 @@ class PetService : Service() {
                         // 之前就是那样把渲染进程压死的（表现：她整个消失 + 服务不再应答）。
                         val code = "(function(){var h=window.__dshPet;" +
                             "if(!h||!h.can())return;" +
-                            "h.grab(${fmt(downLx)},${fmt(downLy)});})()"
+                            "h.p={x:${fmt(downLx)},y:${fmt(downLy)}};h.down(${fmt(downLx)},${fmt(downLy)});})()"
                         dispatchJs(code)
                     }
                     if (midMoved) {
@@ -645,17 +651,17 @@ class PetService : Service() {
                         val pp = midParams_
                         val code = (if (ev.actionMasked == MotionEvent.ACTION_UP)
                             "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
-                                "h.grabEnd(${fmt((ev.rawX - (pp?.x ?: 0) + pageOffX) / sc)},${fmt((ev.rawY - (pp?.y ?: 0) + pageOffY) / sc)});})()"
+                                "h.up(${fmt((ev.rawX - (pp?.x ?: 0)))},${fmt((ev.rawY - (pp?.y ?: 0)))});})()"
                         else
-                            "(function(){var h=window.__dshPet;if(!h||!h.can())return;h.cancel();})()")
+                            "(function(){var h=window.__dshPet;if(!h||!h.can())return;var pp=h.p;h.up(pp?pp.x:0,pp?pp.y:0);})()")
                         dispatchJs(code)
                     } else if (ev.actionMasked == MotionEvent.ACTION_UP) {
                         handler.removeCallbacks(longPressTick)
                         val dens = resources.displayMetrics.density
                         val pp = midParams_
                         val sc = cssScale()   // 注意：给网页的坐标要按 CSS 缩放换算，别用 density
-                        val lx = fmt((ev.rawX - (pp?.x ?: 0) + pageOffX) / sc)
-                        val ly = fmt((ev.rawY - (pp?.y ?: 0) + pageOffY) / sc)
+                        val lx = fmt(ev.rawX - (pp?.x ?: 0))
+                        val ly = fmt(ev.rawY - (pp?.y ?: 0))
                         val nowMs = System.currentTimeMillis()
                         val isDouble = nowMs - lastTapAt < 320 &&
                             Math.hypot((ev.rawX - lastTapX).toDouble(), (ev.rawY - lastTapY).toDouble()) < dens * 45
@@ -673,7 +679,7 @@ class PetService : Service() {
                             lastTapX = ev.rawX
                             lastTapY = ev.rawY
                             pendingTapCode = "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
-                                "h.grab($lx,$ly);h.grabEnd($lx,$ly);})()"
+                                "h.tap($lx,$ly);})()"
                             handler.postDelayed(tapTick, 200)
                             server?.log("交互层：轻点她 (" + (nowMs - midDownAt) + "ms)")
                         }

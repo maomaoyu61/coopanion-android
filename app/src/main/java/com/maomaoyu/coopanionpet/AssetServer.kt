@@ -527,59 +527,35 @@ class AssetServer(private val ctx: Context) {
                 // 网页侧握手：把 pet-app.js 里的 ctl 拿到手，并暴露"抓/拖/放"。
                 // 原生交互层（跟手那一小块可触摸窗口）靠它把她拎起来，
                 // 走的是她自己的拖拽动画，不是搬窗口那种平移。
+                // ★ 核心：不去手搓她的拖拽逻辑，而是把原生触摸**翻译成 DOM 指针事件**
+                //   派发进页面 —— 让页面自己的 pointerdown/pointermove/pointerup 原样跑起来。
+                //   坐标、锚点、缓动、命中判定全部由她的代码处理，穿透模式与非穿透模式
+                //   就是**同一条代码路径**（之前手搓那套反复踩坐标系，就是在这儿翻的车）。
                 val petJs = "<script>" + "(function(){" +
                     "var p=window.__dshPet=window.__dshPet||{};" +
                     "p.roam='free';" +
                     "p.ctl=null;" +
                     "p.can=function(){return !!(p.ctl&&p.ctl.pet);};" +
-                    // 原生传进来的都是"相对交互层窗口左上角的 CSS 像素"，直接用
-                    "function cv(lx,ly){return {x:lx,y:ly};}" +
-                    // 按下的那一点换算成舞台坐标，并算她"身体该在哪"——锚点就是手指那一点。
-                    // 注意：不能拿 pet.y 去迭代（上游那个字段是 NaN，真正的纵向位置是 pet.fy）。
-                    // 手指那一点若没落在她身上，就朝她的中心找最近能命中的点；
-                    // 都不行就退到她的中心 —— **绝不能因为"差几个像素"就让这一次触摸石沉大海**。
-                    // （上游 pointerDown 里有 `if(!hitPet(p)) return false`，喂一个没命中的点等于什么都没发生。）
-                    "p.grab=function(lx,ly){if(!p.can())return false;" +
-                    "var a=cv(lx,ly);" +
-                    "var s=p.ctl.toStage(a.x,a.y);" +
-                    "var cx=a.x,cy=a.y,i=0,g=false;" +
-                    "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
-                    "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
-                    "if(!g){cx=s.x;cy=s.y;}" +
-                    // 指针位置由**我**独立累加，起始值取命中点（不是她的位置）。
-                    // 关键：绝不要用 pet.dx/pet.x 去构造它 —— 那等于自引用，
-                    // 而她的拖拽是 pet.dx = lerp(pet.dx, pointer.x, ease(28,dt))，
-                    // 自引用会让每帧补一大截差距，表现就是"一拖就飞"。
-                    // 指针起点 = 拖动开始那一刻她的锚点位置。
-                    // pet-core 进入 drag 时是 setMode('drag',{dx:scruff.x, dy:scruff.y})，
-                    // scruff = toStage(128,36)；然后每个渲染帧做
-                    //     pet.dx = lerp(pet.dx, pointer.x, ease(75,dt))
-                    // 所以指针起点必须**贴着这个锚点**：否则 lerp 一上来就要补"指针-锚点"
-                    // 那一大段差，几帧内被放大成几百像素 —— 表现就是"轻轻一拖就往上窜一大截"。
-                    // 命中点与抓取点之间的偏移照旧带上，抓取瞬间她纹丝不动。
-                    "var sc2=p.ctl.toStage(128,36);" +
-                    "p.pt={x:sc2.x+(cx-a.x),y:sc2.y+(cy-a.y)};" +
-                    "p.lx=a.x;p.ly=a.y;" +
-                    "p.ctl.pointerDown({x:cx,y:cy});" +
-                    "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
-                    "return true;};" +
-                    // 拖动：指针位置 += 手指增量（绝对坐标独立累加）
-                    "p.grabMove=function(lx,ly){if(!p.can())return false;" +
-                    "var a=cv(lx,ly);" +
-                    "if(!p.pt){p.grab(a.x,a.y);return true;}" +
-                    "var dx=a.x-p.lx,dy=a.y-p.ly;" +
-                    "p.lx=a.x;p.ly=a.y;" +
-                    "if(dx||dy){p.pt.x+=dx;p.pt.y+=dy;p.ctl.pointerMove({x:p.pt.x,y:p.pt.y});}" +
-                    "return true;};" +
-                    "p.grabEnd=function(lx,ly){if(!p.can())return false;" +
-                    "var a=cv(lx,ly);" +
-                    "p.ctl.pointerUp();" +
-                    "p.pt=null;return true;};" +
-                    // 显式喊页面自己的两个动作：穿透模式下页面收不到真实事件，
-                    // 而 dblclick 还被 killJs 吞了 —— 只能这样，两种模式才一致。
-                    "p.dbl=function(lx,ly){try{var a=cv(lx,ly);if(window.__dshUI&&window.__dshUI.input){window.__dshUI.input();return true;}}catch(e){}return false;};" +
-                    "p.menu=function(lx,ly){try{var a=cv(lx,ly);if(window.__dshUI&&window.__dshUI.menu){window.__dshUI.menu(a.x,a.y);return true;}}catch(e){}return false;};" +
-                    "p.cancel=function(){if(p.can())try{p.ctl.pointerUp();}catch(e){}p.pt=null;};" +
+                    // 原生传进来的是「相对交互层窗口左上角的 CSS 像素」，加上根窗口偏移
+                    // 就是页面坐标 —— clientX/clientY 用的正是它。
+                    "p.ox=0;p.oy=0;" +
+                    "p.setOff=function(x,y){p.ox=x;p.oy=y;return true;};" +
+                    "function ui(lx,ly){return {x:lx+p.ox,y:ly+p.oy};}" +
+                    "function ptr(type,a,buttons){" +
+                    "var st=document.getElementById('stage');if(!st)return false;" +
+                    "try{st.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,composed:true," +
+                    "clientX:a.x,clientY:a.y,button:0,buttons:buttons,pointerId:1,pointerType:'touch',isPrimary:true}));" +
+                    "return true;}catch(e){return false;}" +
+                    "}" +
+                    "p.down=function(lx,ly){if(!p.can())return false;return ptr('pointerdown',ui(lx,ly),1);};" +
+                    "p.move=function(lx,ly){if(!p.can())return false;return ptr('pointermove',ui(lx,ly),1);};" +
+                    "p.up=function(lx,ly){if(!p.can())return false;return ptr('pointerup',ui(lx,ly),0);};" +
+                    "p.tap=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
+                    "ptr('pointerdown',a,1);ptr('pointerup',a,0);return true;};" +
+                    // 双击/长按：页面那两个动作（输入框/菜单）没法靠合成事件触达
+                    // （dblclick 被 killJs 吞掉），只能显式喊一次。
+                    "p.dbl=function(lx,ly){try{if(window.__dshUI&&window.__dshUI.input){window.__dshUI.input();return true;}}catch(e){}return false;};" +
+                    "p.menu=function(lx,ly){try{var a=ui(lx,ly);if(window.__dshUI&&window.__dshUI.menu){window.__dshUI.menu(a.x,a.y);return true;}}catch(e){}return false;};" +
                     "})()</script>"
                 val posJs = killJs + petJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1,lw=-1,lh=-1;" +
                     "function tick(ts){" +
