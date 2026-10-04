@@ -58,6 +58,20 @@ class AssetServer(private val ctx: Context) {
         if (logs.isEmpty()) "(无)" else logs.toList().takeLast(n).joinToString(" | ")
     }
 
+    /**
+     * 老 WebView（Chromium < 85）不认 ??= / ||= / &&=，会直接抛
+     * "Unexpected token '='" → 整个 JS 模块解析失败 → 她的模型和 WebSocket 全都不启动。
+     * 这里在服务端把这三个运算符降级成等价的老语法（只处理简单标识符，安全）。
+     */
+    private fun transpileJs(src: String): String {
+        var s = src
+        val id = "([A-Za-z_$][A-Za-z0-9_$]*)"
+        s = s.replace(Regex("$id\\s*\\?\\?=")) { m -> m.groupValues[1] + " = (" + m.groupValues[1] + " !== null && " + m.groupValues[1] + " !== void 0) ? " + m.groupValues[1] + " : " }
+        s = s.replace(Regex("$id\\s*\\|\\|=")) { m -> m.groupValues[1] + " = " + m.groupValues[1] + " || " }
+        s = s.replace(Regex("$id\\s*&&=")) { m -> m.groupValues[1] + " = " + m.groupValues[1] + " && " }
+        return s
+    }
+
     fun log(line: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date())
         synchronized(logs) {
@@ -339,6 +353,14 @@ class AssetServer(private val ctx: Context) {
         try {
             val stream: InputStream = ctx.assets.open(assetPath)
             var data = stream.use { it.readBytes() }
+            // 老 WebView 兼容：把 ??= / ||= / &&= 降级成老语法，否则整页 JS 都不跑
+            if (path.endsWith(".js")) {
+                val fixed = transpileJs(String(data, Charsets.UTF_8))
+                if (fixed != String(data, Charsets.UTF_8)) {
+                    data = fixed.toByteArray(Charsets.UTF_8)
+                    log("JS 兼容处理: " + assetPath)
+                }
+            }
             if (path.endsWith("/pet.html") || path == "/web/pet.html") {
                 val html = String(data, Charsets.UTF_8)
                 val css = "<style>html,body{background:transparent!important;" +
