@@ -400,24 +400,46 @@ class AssetServer(private val ctx: Context) {
             // 抓取/甩出逻辑（不搬窗口，所以有动作动画）。同样不碰上游仓库，只在服务时注入。
             if (path.endsWith("/pet-app.js")) {
                 val js = String(data, Charsets.UTF_8)
+                // ① 行为模式可以由原生端给初值
                 val a = js.replaceFirst(
                     "  roam: prefs.roam,",
                     "  roam: ((window.__dshPet && window.__dshPet.roam) || prefs.roam),")
+                // ② 消毒守卫：pet.look 一旦被 NaN 污染，lerp 会让它永久变 NaN，
+                //    而大肥鱼的 draw 用 look 算头的形变 → 头顶/头发/脸全被画到画布外（"头不见了"）。
+                //    这里包一层 ctl.render，每帧绘制前把非有限值归零，并只报一次日志钉住污染源。
                 val b = a.replaceFirst(
-                    "  roam: prefs.roam,",
-                    "  roam: ((window.__dshPet && window.__dshPet.roam) || prefs.roam),")
+                    "function applyPrefs(p) {",
+                    "function __dshLookGuard(){if(window.__lookGuard)return;window.__lookGuard=1;" +
+                        "try{" +
+                        "var bad=function(v){return typeof v!=='number'||!isFinite(v);};" +
+                        "var fix=function(p){if(!p)return null;var b=null;" +
+                        "if(p.look&&bad(p.look[1])){p.look[1]=0;b='look[1]';}" +
+                        "if(p.look&&bad(p.look[0])){p.look[0]=0;b='look[0]';}" +
+                        "if(p.glance&&bad(p.glance[1])){p.glance[1]=0;b='glance[1]';}" +
+                        "if(p.glance&&bad(p.glance[0])){p.glance[0]=0;b='glance[0]';}" +
+                        "if(b&&!window.__lookWarned){window.__lookWarned=1;" +
+                        "console.error('[lookGuard] '+b+' 曾是 NaN，已归零（头的形变参数就是它污染的）');}" +
+                        "return b;};" +
+                        "if(ctl&&ctl.pet)fix(ctl.pet);" +
+                        "if(ctl&&ctl.render){var _r=ctl.render;ctl.render=function(){fix(ctl.pet);return _r.apply(ctl,arguments);};" +
+                        "console.log('[lookGuard] 已接管 ctl.render（每帧消毒）');}" +
+                        "else console.error('[lookGuard] ctl.render 不可用，消毒未启用');" +
+                        "}catch(e){console.error('[lookGuard] 安装失败 '+e.message);}}" +
+                        "function applyPrefs(p) { __dshLookGuard();")
+                // ③ 把 ctl 交出来并立刻安装守卫
                 val c = b.replaceFirst(
                     "const ctl = createPet(",
                     "window.__dshPet = window.__dshPet || {}; const ctl = createPet(")
-                val d = if (c.contains("window.__dshPet.inner =")) c else c.replaceFirst(
+                val d = c.replaceFirst(
                     "function applyPrefs(p) {",
                     "function applyPrefs(p) { window.__dshPet = window.__dshPet || {}; " +
                         "window.__dshPet.ctl = ctl; window.__dshPet.vp = innerWidth; " +
-                        "window.__dshPet.inner = innerWidth;")
+                        "window.__dshPet.inner = innerWidth; __dshLookGuard();")
                 if (d != js) {
                     data = d.toByteArray(Charsets.UTF_8)
                     log("pet-app.js 注入: 控制器已暴露" +
-                        (if (d.contains("__dshPet.ctl = ctl")) "" else " ⚠ applyPrefs 未匹配"))
+                        (if (d.contains("__dshPet.ctl = ctl")) "" else " ⚠ applyPrefs 未匹配") +
+                        (if (d.contains("__dshLookGuard();")) "" else " ⚠ 守卫未接上"))
                 } else {
                     log("pet-app.js 注入: ⚠ 上游结构变了，未注入")
                 }
@@ -469,33 +491,26 @@ class AssetServer(private val ctx: Context) {
                     "p.can=function(){return !!(p.ctl&&p.ctl.pet);};" +
                     // 原生传进来的都是"相对交互层窗口左上角的 CSS 像素"，直接用
                     "function cv(lx,ly){return {x:lx,y:ly};}" +
+                    // 按下的那一点换算成舞台坐标，并算她"身体该在哪"——锚点就是手指那一点。
+                    // 注意：不能拿 pet.y 去迭代（上游那个字段是 NaN，真正的纵向位置是 pet.fy）。
                     "p.grab=function(lx,ly){if(!p.can())return false;" +
-                    "var a=cv(lx,ly),r=p.ctl.pet;" +
-                    // 手指按下的那一点尽量当成抓取点：不在她身上时向她的中心逼近
-                    "var cx=a.x,cy=a.y,i=0,g=false;" +
-                    "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
-                    "cx=a.x+(r.x-a.x)*(1-i/96);cy=a.y+(r.y-a.y)*(1-i/96);}" +
-                    "if(!g){cx=a.x;cy=a.y;}" +
-                    "p.hx=cx-r.x;p.hy=cy-r.y;" +
-                    "p.apx=a.x;p.apy=a.y;" +
-                    "p.ctl.pointerDown({x:cx,y:cy});" +
-                    "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
-                    "p.pt={x:cx,y:cy};p.last=performance.now();" +
+                    "var a=cv(lx,ly);" +
+                    "var s=p.ctl.toStage(a.x,a.y);" +
+                    "p.sx=s.x;p.sy=s.y;" +
+                    "p.lx=a.x;p.ly=a.y;p.pt={x:a.x,y:a.y};p.last=performance.now();" +
+                    "p.ctl.pointerDown({x:a.x,y:a.y});" +
+                    "p.ctl.pointerMove({x:a.x+8,y:a.y+8});" +
                     "return true;};" +
                     "p.grabMove=function(lx,ly){if(!p.can())return false;" +
                     "var a=cv(lx,ly),r=p.ctl.pet;" +
-                    "if(!p.pt){p.pt={x:r.x,y:r.y};p.apx=a.x;p.apy=a.y;}" +
-                    "var dx=a.x-p.apx,dy=a.y-p.apy;" +
-                    "p.apx=a.x;p.apy=a.y;" +
-                    "p.ctl.pointerMove({x:r.x+p.hx+dx,y:r.y+p.hy+dy});" +
+                    "if(!p.pt){p.grab(a.x,a.y);return true;}" +
+                    "var dx=a.x-p.lx,dy=a.y-p.ly;" +
+                    "p.lx=a.x;p.ly=a.y;" +
+                    "p.ctl.pointerMove({x:r.x+p.sx+dx,y:r.fy+p.sy+dy});" +
                     "return true;};" +
                     "p.grabEnd=function(lx,ly){if(!p.can())return false;" +
-                    "var a=cv(lx,ly),now=performance.now();" +
-                    "var dt=Math.max(16,now-(p.last||now));" +
-                    "var vx=((a.x-p.apx)/dt)*1000,vy=((a.y-p.apy)/dt)*1000;" +
-                    "var m=Math.hypot(vx,vy);if(m>1800){vx=vx*1800/m;vy=vy*1800/m;}" +
+                    "var a=cv(lx,ly);" +
                     "p.ctl.pointerUp();" +
-                    "if(p.ctl.dropAt){try{p.ctl.dropAt({x:a.x,y:a.y,vx:vx,vy:vy});}catch(e){}}" +
                     "p.pt=null;return true;};" +
                     "p.cancel=function(){if(p.can())try{p.ctl.pointerUp();}catch(e){}p.pt=null;};" +
                     "})()</script>"

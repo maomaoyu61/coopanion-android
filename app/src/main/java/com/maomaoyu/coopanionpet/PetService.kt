@@ -100,6 +100,9 @@ class PetService : Service() {
     private var lastMoveAt = 0L
     private var lastJsAt = 0L
     private var lastFollowAt = 0L
+    /** 根（渲染）窗口相对屏幕的偏移：交互层的局部坐标 + 这个偏移 = 网页的页面坐标。 */
+    private var pageOffX = 0
+    private var pageOffY = 0
     private var pendingLx = 0f
     private var pendingLy = 0f
     private var movePending = false
@@ -113,8 +116,13 @@ class PetService : Service() {
      * 她那边本来就设了 RENDERER_PRIORITY_WAIVED（允许系统收走渲染进程），
      * 所以这种事必须从源头避免。
      */
+    /** 派发前统一消毒：NaN/Infinity 绝不能进网页 —— 之前就是这样把她的视线污染成 NaN 的。 */
     private fun dispatchJs(code: String) {
         val w = web_ ?: return
+        if (code.contains("NaN") || code.contains("Infinity")) {
+            server?.log("⚠ 拦下一次坏坐标的注入（含 NaN/Infinity），已丢弃")
+            return
+        }
         lastJsAt = System.currentTimeMillis()
         try { w.evaluateJavascript(code, null) } catch (_: Exception) {}
     }
@@ -374,6 +382,9 @@ class PetService : Service() {
             y = statusBar
         }
         params_ = params
+        // 交互层喂给网页的坐标必须是"页面坐标"：根窗口在屏幕上的偏移就是页面原点
+        pageOffX = params.x
+        pageOffY = params.y
 
         port_ = port
         val web = PetWebView(this) { want ->
@@ -536,9 +547,11 @@ class PetService : Service() {
                     midEndScreenY = ev.rawY
                     midDownAt = System.currentTimeMillis()
                     // 手指落在她身上时，网页的抓取点应当就压在这一下按的地方
+                    // 手指落点 → 页面坐标（交互层局部像素 + 根窗口偏移），再按实际缩放换成 CSS 像素
                     val dens = resources.displayMetrics.density
-                    downLx = p2?.let { (ev.rawX - it.x) / dens } ?: 0f
-                    downLy = p2?.let { (ev.rawY - it.y) / dens } ?: 0f
+                    val sc = cssScale()
+                    downLx = p2?.let { (ev.rawX - it.x + pageOffX) / sc } ?: 0f
+                    downLy = p2?.let { (ev.rawY - it.y + pageOffY) / sc } ?: 0f
                     lastMx = ev.rawX
                     lastMy = ev.rawY
                     lastMoveAt = System.currentTimeMillis()
@@ -567,8 +580,9 @@ class PetService : Service() {
                             lastMy = ev.rawY
                             try { wm.updateViewLayout(v, pp) } catch (_: Exception) {}
                             // 把"当前位置"记下来，真正的 JS 派发按帧节流（见 dispatchMove）
-                            pendingLx = (ev.rawX - pp.x) / resources.displayMetrics.density
-                            pendingLy = (ev.rawY - pp.y) / resources.displayMetrics.density
+                            val sc2 = cssScale()
+                            pendingLx = (ev.rawX - pp.x + pageOffX) / sc2
+                            pendingLy = (ev.rawY - pp.y + pageOffY) / sc2
                             scheduleMove()
                         }
                     }
@@ -617,6 +631,12 @@ class PetService : Service() {
     private fun fmt(f: Float): String {
         val r = Math.round(f * 100f) / 100f
         return r.toString()
+    }
+
+    /** 一个 CSS 像素等于多少屏幕像素（网页视口宽度对不上时退回 density）。 */
+    private fun cssScale(): Float {
+        val sw = resources.displayMetrics.widthPixels.toFloat()
+        return if (lastVp > 1f && sw > 0f) sw / lastVp else resources.displayMetrics.density
     }
 
     /** 悬浮小按钮：点一下切换「操作手机 / 摸桌宠」；拖到屏幕左右边缘会自动藏成一条透明小竖条。 */
