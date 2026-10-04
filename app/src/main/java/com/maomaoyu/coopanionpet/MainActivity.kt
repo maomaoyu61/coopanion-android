@@ -394,9 +394,12 @@ class MainActivity : Activity() {
                 var statusCbFirst = true
                 onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
+                        // 只跳过初始化那一次回调；之后**哪怕选的是同一个值**也要恢复显示
                         if (statusCbFirst) { statusCbFirst = false; return }
                         val want = when (position) { 1 -> "head"; 2 -> "off"; else -> "feet" }
-                        prefs.edit().putString("status_pos", want).apply()
+                        prefs.edit().putString("status_pos", want)
+                            .putBoolean("status_hidden", false)
+                            .apply()
                         PetService.instance?.applyStatusPlacement()
                     }
                     override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
