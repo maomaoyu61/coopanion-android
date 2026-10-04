@@ -1054,7 +1054,8 @@ class PetService : Service() {
         //    ★ 但拖动中窗口**只归手指管**（ACTION_MOVE 里直接平移）。拖动时她画在哪
         //      和网页报来的包围盒不是一回事（pet.dx/dy 与 pet.x/fy 不同坐标系），
         //      两边同时驱动会互相打架、把窗口推飞。
-        val mv = if (midDragging) null else mid_        val mp = midParams_
+        val mv = if (midDragging) null else mid_
+        val mp = midParams_
         if (mv != null && mp != null) {
             // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。
             // 别按 density 去乘尺寸 —— 那会让窗口比她还大好几倍。
