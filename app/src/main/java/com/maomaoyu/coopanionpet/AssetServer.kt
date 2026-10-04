@@ -430,15 +430,46 @@ class AssetServer(private val ctx: Context) {
                 val c = b.replaceFirst(
                     "const ctl = createPet(",
                     "window.__dshPet = window.__dshPet || {}; const ctl = createPet(")
-                val d = c.replaceFirst(
+                // ★ 拖动时**取消舞台边界**：上游把拖动中的横向位置夹在 minX()/maxX() 里
+                //   （留出她自身宽度，所以贴不到左右边），纵向还压了 floorY-245S，拎不高。
+                //   这里在每帧绘制前把夹取结果放回去，让她能拖到屏幕任意角落；
+                //   拖动中的视觉位置是 pet.dx/dy，所以只有松手落地才需要这个。
+                val c2 = c.replaceFirst(
+                    "function applyPrefs(p) {",
+                    "function __dshFreeDrag(){" +
+                        "if(window.__freeDrag)return;window.__freeDrag=1;" +
+                        "function unfix(q,bd){" +
+                        "if(!q)return;" +
+                        "if(typeof q.x==='number'&&isFinite(q.x)){if(q.x<0)q.x=0;else if(q.x>bd.W)q.x=bd.W;}" +
+                        "if(typeof q.fy==='number'&&isFinite(q.fy)){var hi=bd.floorY-300;if(q.fy<hi)q.fy=hi;}" +
+                        "}" +
+                        "try{" +
+                        "var _r=ctl.render;" +
+                        "ctl.render=function(){" +
+                        "var q=ctl.pet,bd=ctl.bounds;" +
+                        "if(q&&q.mode==='drag')unfix(q,bd);" +
+                        "return _r.apply(ctl,arguments);" +
+                        "};" +
+                        "}catch(e){console.error('[freeDrag] '+e.message);}" +
+                        "}" +
+                        "function applyPrefs(p) {")
+                val d = c2.replaceFirst(
                     "function applyPrefs(p) {",
                     "function applyPrefs(p) { window.__dshPet = window.__dshPet || {}; " +
                         "window.__dshPet.ctl = ctl; window.__dshPet.vp = innerWidth; " +
-                        "window.__dshPet.inner = innerWidth; __dshLookGuard();")
+                        "window.__dshPet.inner = innerWidth; __dshLookGuard(); __dshFreeDrag();")
+                // 拖拽的跟随速度：上游 ease(28,dt) 每帧只补 37% 的差距，手感偏"拖泥带水"。
+                // 提到 75（每帧约 70%）跟手得多，又不会像 1:1 那样抖。
+                val d1 = d.replaceFirst(
+                    "pet.dx = lerp(pet.dx, pointer.x, ease(28, dt));",
+                    "pet.dx = lerp(pet.dx, pointer.x, ease(75, dt));")
+                val d2 = d1.replaceFirst(
+                    "pet.dy = lerp(pet.dy, Math.min(pointer.y, floorY - 245 * S), ease(28, dt));",
+                    "pet.dy = lerp(pet.dy, Math.min(pointer.y, floorY - 245 * S), ease(75, dt));")
                 // 把页面自己的「双击弹输入框」「长按弹菜单」暴露出来：
                 // 穿透模式下页面收不到真实事件（dblclick 还被 killJs 吞了），
                 // 原生端必须能把这两个动作显式喊一次，两种模式才会表现一致。
-                val e = d.replaceFirst(
+                val e = d2.replaceFirst(
                     "function openInput() {",
                     "window.__dshUI = window.__dshUI || {}; window.__dshUI.input = openInput;\n" +
                         "function openInput() {")
