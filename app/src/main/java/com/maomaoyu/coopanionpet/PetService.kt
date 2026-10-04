@@ -106,6 +106,8 @@ class PetService : Service() {
             status_?.visibility = android.view.View.GONE
         } else {
             applyStatusPlacement()
+        syncVoice()   // ★ 服务重启后把语音口令恢复起来（以前漏了，重启就得手动切开关）
+        refreshForegroundType()
         }
         server?.log(if (hide) "横屏：已收起悬浮钮和状态条" else "竖屏：已恢复悬浮钮")
     }
@@ -131,10 +133,7 @@ class PetService : Service() {
         super.onCreate()
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
-            startForeground(NOTIF_ID, buildNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
-        } else {
-            startForeground(NOTIF_ID, buildNotification())
+            refreshForegroundType()
         }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -171,7 +170,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v4.4 ===")
+        s.log("=== PetService 启动 v4.5 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
@@ -1120,13 +1119,41 @@ class PetService : Service() {
     fun isPetAlive(): Boolean = server?.isPetConnected() == true
 
     /** 给别的类写日志用（server 是私有的）。 */
+    /**
+     * 重设前台服务类型。
+     * Android 11+ 规定：前台服务要访问麦克风，必须在启动时声明 microphone 类型，
+     * 否则语音识别会一直报 code=9（ERROR_INSUFFICIENT_PERMISSIONS）。
+     */
+    private fun refreshForegroundType() {
+        val wantMic = petPrefs().getBoolean("voice_cmd", false)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 34) {
+                val t = if (wantMic)
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                else
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                startForeground(NOTIF_ID, buildNotification(), t)
+            } else if (android.os.Build.VERSION.SDK_INT >= 30 && wantMic) {
+                startForeground(NOTIF_ID, buildNotification(),
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                startForeground(NOTIF_ID, buildNotification())
+            }
+        } catch (e: Exception) {
+            try { startForeground(NOTIF_ID, buildNotification()) } catch (_: Exception) {}
+        }
+    }
+
     fun logLine(s: String) {
         try { server?.log(s) } catch (_: Exception) {}
     }
 
     /** 按设置和息屏状态，决定语音口令听不听。 */
     fun syncVoice() {
-        val want = petPrefs().getBoolean("voice_cmd", false) && screenOn_
+        val on = petPrefs().getBoolean("voice_cmd", false)
+        refreshForegroundType()          // ★ 先声明（或不声明）麦克风类型，否则识别必报 code=9
+        val want = on && screenOn_
         if (want) {
             if (voice_ == null) voice_ = PetVoice(this)
             voice_?.start()

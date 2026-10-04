@@ -12,6 +12,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 兜底：让"按应用名打开"在所有 ROM 上都能工作（个人侧载用，不上架商店） -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <!-- Android 14+ 前台服务要用麦克风必须声明这个类型 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- Android 11+ 包可见性：不声明就看不到/绑不上系统语音引擎 -->
     <queries>
@@ -68,7 +70,7 @@
         <service
             android:name=".PetService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|microphone">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="overlay desktop pet companion" />
