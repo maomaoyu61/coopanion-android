@@ -109,6 +109,24 @@ class PetService : Service() {
         }
         server?.log(if (hide) "横屏：已收起悬浮钮和状态条" else "竖屏：已恢复悬浮钮")
     }
+
+    /**
+     * 被系统杀掉后要求重启（START_STICKY）——安卓上最标准的保活手段。
+     * 国产 ROM 尤其需要它：内存紧张时前台服务也会被清掉，靠这个能自己回来。
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return android.app.Service.START_STICKY
+    }
+
+    /** 多任务界面把 App 划掉时，顺手把服务再拉起来（各家 ROM 的常规做法）。 */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        try {
+            val i = Intent(applicationContext, PetService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+        } catch (_: Exception) {
+        }
+        super.onTaskRemoved(rootIntent)
+    }
     override fun onCreate() {
         super.onCreate()
         createChannel()
@@ -153,7 +171,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v3.49 ===")
+        s.log("=== PetService 启动 v3.50 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {

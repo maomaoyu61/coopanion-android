@@ -87,6 +87,12 @@ class MainActivity : Activity() {
         // ── 权限与启动 ──
         col.addView(section("① 权限与启动"))
         col.addView(card().apply {
+            addView(TextView(this).apply {
+                id = 9001
+                textSize = 13f
+                setTextColor(0xFF4759AD.toInt())
+                setPadding(0, (d * 6).toInt(), 0, (d * 6).toInt())
+            })
             addView(pill("授予悬浮窗权限", false) {
                 // 各家 ROM 的这个页面不一样，逐级降级
                 val ok = try {
@@ -116,6 +122,7 @@ class MainActivity : Activity() {
                     catch (e2: Exception) { toast("请手动到：设置 → 电池 → 应用省电策略 → 无限制") }
                 }
             })
+            addView(pill("自启动设置（按机型自动跳转）", false) { openAutoStartSettings() })
             addView(pill("应用详情（开自启动 / 后台运行）", false) {
                 try {
                     startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -499,9 +506,79 @@ class MainActivity : Activity() {
                 "• 那条状态条是开发者功能，只在电脑端联动跑着时才有内容；没内容不影响任何功能，也不用告诉谁 —— 断了自己会恢复（重启一次 DSH 即可）"))
         })
 
+        refreshSelfCheck()
         setContentView(ScrollView(this).apply { addView(col) },
             ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT))
+    }
+
+    /** 各厂商的"自启动/后台运行"页面都不一样，按品牌逐个试，最后兜底到应用详情。 */
+    private fun openAutoStartSettings() {
+        val brand = (Build.MANUFACTURER + " " + Build.BRAND).lowercase()
+        val tries: List<android.content.ComponentName> = when {
+            brand.contains("xiaomi") || brand.contains("redmi") || brand.contains("poco") -> listOf(
+                android.content.ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"))
+            brand.contains("huawei") || brand.contains("honor") -> listOf(
+                android.content.ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+                android.content.ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity"))
+            brand.contains("oppo") || brand.contains("realme") || brand.contains("oneplus") -> listOf(
+                android.content.ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
+                android.content.ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity"),
+                android.content.ComponentName("com.oplus.safecenter", "com.oplus.safecenter.startupapp.StartupAppListActivity"))
+            brand.contains("vivo") || brand.contains("iqoo") -> listOf(
+                android.content.ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+                android.content.ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"))
+            brand.contains("samsung") -> listOf(
+                android.content.ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity"),
+                android.content.ComponentName("com.samsung.android.sm", "com.samsung.android.sm.ui.battery.BatteryActivity"))
+            brand.contains("meizu") -> listOf(
+                android.content.ComponentName("com.meizu.safe", "com.meizu.safe.security.SHOW_APPSEC"))
+            brand.contains("asus") -> listOf(
+                android.content.ComponentName("com.asus.mobilemanager", "com.asus.mobilemanager.autostart.AutoStartActivity"))
+            else -> emptyList()
+        }
+        for (c in tries) {
+            try {
+                startActivity(Intent().setComponent(c))
+                return
+            } catch (_: Exception) {
+            }
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:$packageName")))
+            toast("这台机器的自启动页没找到，已在应用详情里手动开")
+        } catch (_: Exception) {
+            toast("请手动到：设置 → 应用 → 自启动 / 后台运行 里开启")
+        }
+    }
+
+    /** 设置自检：一眼看出还差哪几项，不用来回问。 */
+    private fun refreshSelfCheck() {
+        try {
+            val v = findViewById<TextView>(9001) ?: return
+            val overlay = Settings.canDrawOverlays(this)
+            val notif = Build.VERSION.SDK_INT < 33 ||
+                checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED
+            val batt = try {
+                getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+            } catch (e: Exception) { false }
+            val wv = try { android.webkit.WebView.getCurrentWebViewPackage()?.versionName ?: "?" } catch (e: Exception) { "?" }
+            val miss = ArrayList<String>()
+            if (!overlay) miss.add("悬浮窗权限")
+            if (!notif) miss.add("通知权限")
+            if (!batt) miss.add("后台保活(电池)")
+            val head = (if (overlay) "✓" else "✗") + "悬浮窗  " + (if (notif) "✓" else "✗") + "通知  " +
+                       (if (batt) "✓" else "✗") + "后台保活   WebView " + wv
+            v.text = "设置自检：" + head +
+                (if (miss.isEmpty()) "   → 全部就绪 ✓" else "\n→ 还差 " + miss.size + " 项：" + miss.joinToString("、") + "（点下面的按钮去设）")
+        } catch (_: Exception) {
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshSelfCheck()
     }
 
     /* ---------- 小工具 ---------- */
