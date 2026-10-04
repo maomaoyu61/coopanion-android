@@ -618,19 +618,20 @@ class PetService : Service() {
                     if (midMoved) {
                         val pp = midParams_
                         if (pp != null) {
-                            midEndScreenY = ev.rawY
-                            pp.x = (pp.x + (ev.rawX - lastMx)).toInt()
-                            pp.y = (pp.y + (ev.rawY - lastMy)).toInt()
-                            lastMx = ev.rawX
-                            lastMy = ev.rawY
-                            try { wm.updateViewLayout(v, pp) } catch (_: Exception) {}
-                            // 只喂手指这一步的**增量**（用原始屏幕坐标算，避免正反馈）
-                            val sc2 = cssScale()
-                            pendingLx = (ev.rawX - lastScreenX) / sc2
-                            pendingLy = (ev.rawY - lastScreenY) / sc2
+                            // ★ 拖动中**窗口必须钉死在原地**（不跟着她/手指跑）。
+                            //   否则：(rawX-窗口x) 这个"窗口内坐标"会随窗口一起漂，
+                            //   页面坐标越算越偏 → 她跑更远 → 窗口跟更远 …… 正反馈，
+                            //   实测每步增益约 7 倍，表现就是"一拖就飞大老远"。
+                            //   窗口不动时，手指的页面坐标就是固定的线性映射。
+                            val nx = (ev.rawX - lastScreenX) / cssScale()
+                            val ny = (ev.rawY - lastScreenY) / cssScale()
                             lastScreenX = ev.rawX
                             lastScreenY = ev.rawY
-                            scheduleMove()
+                            if (nx != 0f || ny != 0f) {
+                                pendingLx = nx
+                                pendingLy = ny
+                                scheduleMove()
+                            }
                         }
                     }
                     true
@@ -1053,8 +1054,7 @@ class PetService : Service() {
         //    ★ 但拖动中窗口**只归手指管**（ACTION_MOVE 里直接平移）。拖动时她画在哪
         //      和网页报来的包围盒不是一回事（pet.dx/dy 与 pet.x/fy 不同坐标系），
         //      两边同时驱动会互相打架、把窗口推飞。
-        val mv = if (midDragging) null else mid_
-        val mp = midParams_
+        val mv = if (midDragging) null else mid_        val mp = midParams_
         if (mv != null && mp != null) {
             // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。
             // 别按 density 去乘尺寸 —— 那会让窗口比她还大好几倍。
@@ -1074,11 +1074,10 @@ class PetService : Service() {
                     try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
                     // 自证日志：把交互层的真实矩形写出来（诊断"死区多大"时直接看这行）
                     val nw = System.currentTimeMillis()
-                    if (nw - lastMidLogAt > 3000) {
+                    if (nw - lastMidLogAt > 1500) {
                         lastMidLogAt = nw
-                        val screeN = "屏幕 " + sw + "x" + sh
                         server?.log("交互层 rect x=" + mx + " y=" + my + " " + w + "x" + h +
-                            " (她 " + (cw * sc).toInt() + "x" + (ch * sc).toInt() + " @" + (cx * sc).toInt() + "," + (cy * sc).toInt() + ", sc=" + (Math.round(sc * 100f) / 100f) + ") " + screeN)
+                            " (她 " + (cw * sc).toInt() + "x" + (ch * sc).toInt() + " @" + (cx * sc).toInt() + "," + (cy * sc).toInt() + ", sc=" + (Math.round(sc * 100f) / 100f) + ", drag=" + midDragging + ")")
                     }
                 }
             }

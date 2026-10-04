@@ -515,20 +515,21 @@ class AssetServer(private val ctx: Context) {
                     "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
                     "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
                     "if(!g){cx=s.x;cy=s.y;}" +
-                    "p.lx=a.x;p.ly=a.y;p.pt={x:a.x,y:a.y};" +
+                    // 指针位置由**我**独立累加，起始值取命中点（不是她的位置）。
+                    // 关键：绝不要用 pet.dx/pet.x 去构造它 —— 那等于自引用，
+                    // 而她的拖拽是 pet.dx = lerp(pet.dx, pointer.x, ease(28,dt))，
+                    // 自引用会让每帧补一大截差距，表现就是"一拖就飞"。
+                    "p.pt={x:cx,y:cy};p.lx=a.x;p.ly=a.y;" +
                     "p.ctl.pointerDown({x:cx,y:cy});" +
                     "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
                     "return true;};" +
-                    // 拖动：只喂「手指这一步移动了多少」。她的 pointerMove 内部会让视觉偏移去追指针，
-                    // 我若每帧再加一次累计位移，等于把她往前推两次 —— 她会跑得比手指/窗口快，
-                    // 看起来就是"有东西挡着她"。所以这里只用增量。
+                    // 拖动：指针位置 += 手指增量（绝对坐标独立累加）
                     "p.grabMove=function(lx,ly){if(!p.can())return false;" +
                     "var a=cv(lx,ly);" +
                     "if(!p.pt){p.grab(a.x,a.y);return true;}" +
                     "var dx=a.x-p.lx,dy=a.y-p.ly;" +
                     "p.lx=a.x;p.ly=a.y;" +
-                    "if(dx||dy){var r=p.ctl.pet;p.pt.x+=dx;p.pt.y+=dy;" +
-                    "p.ctl.pointerMove({x:p.pt.x,y:p.pt.y});}" +
+                    "if(dx||dy){p.pt.x+=dx;p.pt.y+=dy;p.ctl.pointerMove({x:p.pt.x,y:p.pt.y});}" +
                     "return true;};" +
                     "p.grabEnd=function(lx,ly){if(!p.can())return false;" +
                     "var a=cv(lx,ly);" +
