@@ -106,8 +106,6 @@ class PetService : Service() {
             status_?.visibility = android.view.View.GONE
         } else {
             applyStatusPlacement()
-        syncVoice()   // ★ 服务重启后把语音口令恢复起来（以前漏了，重启就得手动切开关）
-        refreshForegroundType()
         }
         server?.log(if (hide) "横屏：已收起悬浮钮和状态条" else "竖屏：已恢复悬浮钮")
     }
@@ -134,6 +132,8 @@ class PetService : Service() {
         createChannel()
         if (Build.VERSION.SDK_INT >= 34) {
             refreshForegroundType()
+        syncVoice()   // ★ 服务重启后把语音口令恢复起来（以前漏了：重启就得手动切开关）
+        refreshForegroundType()
         }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -170,7 +170,7 @@ class PetService : Service() {
             }
         }
         val s = AssetServer(this)
-        s.log("=== PetService 启动 v4.5 ===")
+        s.log("=== PetService 启动 v4.6 ===")
         brain.logCb = { line -> s.log(line) }
         s.onEval = { code ->
             handler.post {
