@@ -550,7 +550,16 @@ class AssetServer(private val ctx: Context) {
                     // 关键：绝不要用 pet.dx/pet.x 去构造它 —— 那等于自引用，
                     // 而她的拖拽是 pet.dx = lerp(pet.dx, pointer.x, ease(28,dt))，
                     // 自引用会让每帧补一大截差距，表现就是"一拖就飞"。
-                    "p.pt={x:cx,y:cy};p.lx=a.x;p.ly=a.y;" +
+                    // 指针起点 = 拖动开始那一刻她的锚点位置。
+                    // pet-core 进入 drag 时是 setMode('drag',{dx:scruff.x, dy:scruff.y})，
+                    // scruff = toStage(128,36)；然后每个渲染帧做
+                    //     pet.dx = lerp(pet.dx, pointer.x, ease(75,dt))
+                    // 所以指针起点必须**贴着这个锚点**：否则 lerp 一上来就要补"指针-锚点"
+                    // 那一大段差，几帧内被放大成几百像素 —— 表现就是"轻轻一拖就往上窜一大截"。
+                    // 命中点与抓取点之间的偏移照旧带上，抓取瞬间她纹丝不动。
+                    "var sc2=p.ctl.toStage(128,36);" +
+                    "p.pt={x:sc2.x+(cx-a.x),y:sc2.y+(cy-a.y)};" +
+                    "p.lx=a.x;p.ly=a.y;" +
                     "p.ctl.pointerDown({x:cx,y:cy});" +
                     "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
                     "return true;};" +
