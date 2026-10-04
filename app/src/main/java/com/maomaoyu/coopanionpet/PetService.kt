@@ -1244,7 +1244,7 @@ class PetService : Service() {
                 say("好，我来试试…")
                 Thread({
                     val r = try {
-                        PetAgent.run(task) { step -> handler.post { say(step) } }
+                        PetAgent.run(task, { sys, usr -> brain.agentStep(sys, usr) }) { step -> handler.post { say(step) } }
                     } catch (e: Exception) { "我卡住了…" }
                     handler.post { say(r) }
                 }, "petagent").start()

@@ -32,14 +32,14 @@ object PetAgent {
 - 一步只做一件事；做完看新屏幕再决定下一步
 - 不确定就 {"act":"done","say":"我不太确定下一步该点哪，你能说得更具体点吗"}"""
 
-    /** 给 AI 的一步请求（不带情绪人设，纯干活）。 */
-    private fun askAI(task: String, screen: String, done: List<String>): String? {
+    /** 给 AI 的一步请求（不带情绪人设，纯干活）。ai = (system, user) -> 回答 */
+    private fun askAI(ai: (String, String) -> String?, task: String, screen: String, done: List<String>): String? {
         val sb = StringBuilder()
         sb.append("任务：").append(task).append("\n\n")
         if (done.isNotEmpty()) sb.append("已经做过的：\n").append(done.joinToString("\n")).append("\n\n")
         sb.append("当前屏幕内容：\n").append(screen.take(1800)).append("\n\n")
         sb.append("输出下一步的 JSON（只一行）：")
-        return Brain.agentStep(SYSTEM, sb.toString())
+        return ai(SYSTEM, sb.toString())
     }
 
     /**
@@ -47,7 +47,7 @@ object PetAgent {
      * @param onSay 每步播报（让她说话）
      * @return 结束语（她会说出口）
      */
-    fun run(task: String, onSay: (String) -> Unit): String {
+    fun run(task: String, ai: (String, String) -> String?, onSay: (String) -> Unit): String {
         val s = PetA11yService.instance ?: return "要操作手机得先把无障碍打开哦"
         val done = ArrayList<String>()
         var lastSay = ""
@@ -58,7 +58,7 @@ object PetAgent {
             if (s.lastRefusal != null) {
                 return s.lastRefusal!!
             }
-            val raw = askAI(task, screen, done)
+            val raw = askAI(ai, task, screen, done)
                 ?: return "网络好像不太顺，先停在这儿了" + if (lastSay.isNotEmpty()) "（" + lastSay + "）" else ""
             val act = try {
                 val t = raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
