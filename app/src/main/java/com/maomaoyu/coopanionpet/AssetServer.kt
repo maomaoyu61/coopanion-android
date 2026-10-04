@@ -493,13 +493,20 @@ class AssetServer(private val ctx: Context) {
                     "function cv(lx,ly){return {x:lx,y:ly};}" +
                     // 按下的那一点换算成舞台坐标，并算她"身体该在哪"——锚点就是手指那一点。
                     // 注意：不能拿 pet.y 去迭代（上游那个字段是 NaN，真正的纵向位置是 pet.fy）。
+                    // 手指那一点若没落在她身上，就朝她的中心找最近能命中的点；
+                    // 都不行就退到她的中心 —— **绝不能因为"差几个像素"就让这一次触摸石沉大海**。
+                    // （上游 pointerDown 里有 `if(!hitPet(p)) return false`，喂一个没命中的点等于什么都没发生。）
                     "p.grab=function(lx,ly){if(!p.can())return false;" +
                     "var a=cv(lx,ly);" +
                     "var s=p.ctl.toStage(a.x,a.y);" +
+                    "var cx=a.x,cy=a.y,i=0,g=false;" +
+                    "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
+                    "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
+                    "if(!g){cx=s.x;cy=s.y;}" +
                     "p.sx=s.x;p.sy=s.y;" +
                     "p.lx=a.x;p.ly=a.y;p.pt={x:a.x,y:a.y};p.last=performance.now();" +
-                    "p.ctl.pointerDown({x:a.x,y:a.y});" +
-                    "p.ctl.pointerMove({x:a.x+8,y:a.y+8});" +
+                    "p.ctl.pointerDown({x:cx,y:cy});" +
+                    "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
                     "return true;};" +
                     "p.grabMove=function(lx,ly){if(!p.can())return false;" +
                     "var a=cv(lx,ly),r=p.ctl.pet;" +
@@ -530,9 +537,9 @@ class AssetServer(private val ctx: Context) {
                     "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
                     "window.requestAnimationFrame(tick);}" +
                     "window.requestAnimationFrame(tick);" +
-                    // alpha 包围盒：每秒最多算一次（整张画布扫一遍 alpha 有点贵，不能每帧做）
+                    // alpha 包围盒：缓存 260ms（她一直在动，缓存太久窗口就追不上 → 你按下去时她已走开）
                     "var abAt=0,abCache=null;" +
-                    "function alphaBounds(){var now=performance.now();if(abCache&&now-abAt<900)return abCache;" +
+                    "function alphaBounds(){var now=performance.now();if(abCache&&now-abAt<260)return abCache;" +
                     "var s=document.querySelector('#pet canvas');if(!s||!s.width)return null;" +
                     "var o=document.createElement('canvas');o.width=s.width;o.height=s.height;" +
                     "var c=o.getContext('2d');c.clearRect(0,0,o.width,o.height);c.drawImage(s,0,0);" +
