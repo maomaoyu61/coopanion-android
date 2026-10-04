@@ -538,16 +538,23 @@ class AssetServer(private val ctx: Context) {
                     "p.can=function(){return !!(p.ctl&&p.ctl.pet);};" +
                     // 原生传进来的是「相对交互层窗口左上角的 CSS 像素」，加上根窗口偏移
                     // 就是页面坐标 —— clientX/clientY 用的正是它。
-                    "p.ox=0;p.oy=0;" +
-                    "p.setOff=function(x,y){p.ox=x;p.oy=y;return true;};" +
-                    "function ui(lx,ly){return {x:lx+p.ox,y:ly+p.oy};}" +
+                    "p.ox=0;p.oy=0;p.sc=1;" +
+                    // 原生传进来的是「窗口内设备像素」，窗口位置/缩放也由原生给：
+                    //     page = (local + 窗口屏幕位置) / CSS缩放
+                    "p.setOff=function(x,y,sc){p.ox=x;p.oy=y;if(sc>0)p.sc=sc;return true;};" +
+                    "function ui(lx,ly){return {x:(lx+p.ox)/p.sc,y:(ly+p.oy)/p.sc};}" +
                     "function ptr(type,a,buttons){" +
                     "var st=document.getElementById('stage');if(!st)return false;" +
                     "try{st.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,composed:true," +
                     "clientX:a.x,clientY:a.y,button:0,buttons:buttons,pointerId:1,pointerType:'touch',isPrimary:true}));" +
                     "return true;}catch(e){return false;}" +
                     "}" +
-                    "p.down=function(lx,ly){if(!p.can())return false;return ptr('pointerdown',ui(lx,ly),1);};" +
+                    "p.down=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +
+                    "if(!p.ctl.hitPet(a)){var s=p.ctl.toStage(128,128),i=0,g=false,cx=a.x,cy=a.y;" +
+                    "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
+                    "cx=a.x+(s.x-a.x)*(1-i/96);cy=a.y+(s.y-a.y)*(1-i/96);}" +
+                    "if(g)a={x:cx,y:cy};else return false;}" +
+                    "return ptr('pointerdown',a,1);};" +
                     "p.move=function(lx,ly){if(!p.can())return false;return ptr('pointermove',ui(lx,ly),1);};" +
                     "p.up=function(lx,ly){if(!p.can())return false;return ptr('pointerup',ui(lx,ly),0);};" +
                     "p.tap=function(lx,ly){if(!p.can())return false;var a=ui(lx,ly);" +

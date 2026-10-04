@@ -110,15 +110,18 @@ class PetService : Service() {
     /** 根（渲染）窗口相对屏幕的偏移：交互层的局部坐标 + 这个偏移 = 网页的页面坐标。 */
     private var lastHookOffX = Int.MIN_VALUE
     private var lastHookOffY = Int.MIN_VALUE
+    private var lastHookSc = -1f
     private var pageOffX = 0
     private var pageOffY = 0
     private var lastMidLogAt = 0L
     /** 把根窗口在屏幕上的偏移交给页面钩子：它负责把「窗口内像素」换成页面坐标。 */
-    private fun syncHookOffset(wx: Int = pageOffX, wy: Int = pageOffY) {
-        if (wx == lastHookOffX && wy == lastHookOffY) return
+    private fun syncHookOffset(wx: Int = pageOffX, wy: Int = pageOffY, sc: Float = -1f) {
+        val scale = if (sc > 0f) sc else cssScale()
+        if (wx == lastHookOffX && wy == lastHookOffY && scale == lastHookSc) return
         lastHookOffX = wx
         lastHookOffY = wy
-        val code = "(function(){var h=window.__dshPet;if(h&&h.setOff)h.setOff(" + wx + "," + wy + ");return 1;})()"
+        lastHookSc = scale
+        val code = "(function(){var h=window.__dshPet;if(h&&h.setOff)h.setOff(" + wx + "," + wy + "," + scale + ");return 1;})()"
         dispatchJs(code)
     }
     /** 双击/长按判定（穿透模式下页面收不到真实事件，只能在这边认）。 */
@@ -148,8 +151,9 @@ class PetService : Service() {
         server?.log("交互层：长按她 → 菜单")
         dispatchJs("(function(){var h=window.__dshPet;if(h&&h.menu)h.menu($lx,$ly);})()")
     }
-    private var pendingLx = 0f
-    private var pendingLy = 0f
+    private var pendingSx = 0f
+    private var pendingSy = 0f
+    private var moveHas = false
     private var movePending = false
 
     /**
@@ -172,13 +176,21 @@ class PetService : Service() {
         try { w.evaluateJavascript(code, null) } catch (_: Exception) {}
     }
 
-    /** 拖动中的位置：按帧节流后合批成一次 JS 调用。 */
+    /**
+     * 拖动中的位置：按帧节流后合批成一次 JS 调用。
+     *
+     * ★ 单位只在这一处转换：页面坐标 = (手指屏幕像素 - 窗口屏幕像素 + 根窗口屏幕偏移) / CSS缩放。
+     *   之前把「窗口内设备像素」直接当页面坐标喂给钩子（一个设备像素、一个 CSS 像素），
+     *   每帧都换算到屏幕外 → hitPet 永远 false → 拖不动。
+     */
     private val moveTick = Runnable {
         movePending = false
-        val code = "(function(){var h=window.__dshPet;" +
-            "if(!h||!h.can())return;" +
-            "var pp=h.p;if(!pp)return;h.move(${fmt(pendingLx)},${fmt(pendingLy)});})()"
-        dispatchJs(code)
+        if (!moveHas) return@Runnable
+        val mp = midParams_ ?: return@Runnable
+        val sc = cssScale()
+        val lx = fmt((pendingSx - mp.x + pageOffX) / sc)
+        val ly = fmt((pendingSy - mp.y + pageOffY) / sc)
+        dispatchJs("(function(){var h=window.__dshPet;if(!h||!h.can())return;h.move($lx,$ly);})()")
     }
 
     private fun scheduleMove() {
@@ -629,18 +641,15 @@ class PetService : Service() {
                     if (midMoved) {
                         val pp = midParams_
                         if (pp != null) {
-                            // ★ 拖动中**窗口必须钉死在原地**（不跟着她/手指跑）。
-                            //   否则：(rawX-窗口x) 这个"窗口内坐标"会随窗口一起漂，
-                            //   页面坐标越算越偏 → 她跑更远 → 窗口跟更远 …… 正反馈，
-                            //   实测每步增益约 7 倍，表现就是"一拖就飞大老远"。
-                            //   窗口不动时，手指的页面坐标就是固定的线性映射。
-                            val nx = (ev.rawX - lastScreenX) / cssScale()
-                            val ny = (ev.rawY - lastScreenY) / cssScale()
-                            lastScreenX = ev.rawX
-                            lastScreenY = ev.rawY
-                            if (nx != 0f || ny != 0f) {
-                                pendingLx = nx
-                                pendingLy = ny
+                            // ★ 传**绝对窗口内坐标**（不是增量！）。
+                            //   钩子的公式是 page = local + 窗口位置，所以 local 必须是
+                            //   "手指相对窗口左上角的像素"。之前这里传的是每帧增量（3px 那种），
+                            //   被当成绝对坐标 → 每帧都落在窗口左上角附近 → hitPet 永远 false。
+                            //   窗口在拖动中钉死不动，所以这个映射是稳定的。
+                            if (ev.rawX != pendingSx || ev.rawY != pendingSy) {
+                                pendingSx = ev.rawX
+                                pendingSy = ev.rawY
+                                moveHas = true
                                 scheduleMove()
                             }
                         }
@@ -1069,7 +1078,7 @@ class PetService : Service() {
         val mp = midParams_
         // local → page 的锚点是**交互层窗口自己的屏幕位置**（不是根窗口偏移：
         // 两者实际并不相等，用错就会出现"触摸参数 143,277 而她页面位置在 1089,2578"这种偏差）
-        if (mp != null) syncHookOffset(mp.x, mp.y)
+        if (mp != null) syncHookOffset(mp.x, mp.y, sc)
         if (mv != null && mp != null) {
             // 手指余量固定按 dp 给（跟缩放无关），窗口＝她真实像素范围＋这点余量。
             // 别按 density 去乘尺寸 —— 那会让窗口比她还大好几倍。
