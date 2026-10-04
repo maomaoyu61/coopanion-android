@@ -130,11 +130,9 @@ class PetService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
-        if (Build.VERSION.SDK_INT >= 34) {
-            refreshForegroundType()
-        syncVoice()   // ★ 服务重启后把语音口令恢复起来（以前漏了：重启就得手动切开关）
         refreshForegroundType()
-        }
+        // ★ 服务重启后把语音口令恢复起来（以前漏了：重启就得手动切开关）
+        syncVoice()
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             if (ttsReady) petPrefs().edit().putBoolean("tts_ok", true).apply()
