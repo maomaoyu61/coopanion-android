@@ -41,10 +41,63 @@ class PetA11yService : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    /* ------------ 安全闸门（所有动作都过这里） ------------ */
+
+    /** 当前前台应用是否在禁用名单里。 */
+    private fun blocked(): Boolean {
+        val pkg = rootInActiveWindow?.packageName?.toString()
+        val label = try {
+            val ai = packageManager.getApplicationInfo(pkg ?: "", 0)
+            packageManager.getApplicationLabel(ai).toString()
+        } catch (_: Exception) { null }
+        return PetSafety.deniedApp(pkg, label)
+    }
+
+    /** 当前界面文字里有没有支付敏感词。 */
+    private fun screenSensitive(): Boolean = PetSafety.sensitiveScreen(dumpRaw())
+
+    /** 最近一次被拒的原因（给上层回话用）。 */
+    @Volatile var lastRefusal: String? = null
+
+    /** 动作闸门：当前应用或界面不安全 → 拦下（返回 true）。 */
+    private fun guardScreen(): Boolean {
+        if (blocked()) {
+            lastRefusal = PetSafety.reason(rootInActiveWindow?.packageName?.toString(), null)
+            return true
+        }
+        if (screenSensitive()) {
+            lastRefusal = "这个界面涉及支付/账户安全，我不动手"
+            return true
+        }
+        return false
+    }
+
+    /** 点按闸门：要点的那个东西本身也不能敏感。 */
+    private fun guardTap(text: String): Boolean {
+        if (guardScreen()) return true
+        if (PetSafety.sensitiveTap(text)) {
+            lastRefusal = "「" + text + "」涉及支付/账户安全，我不点"
+            return true
+        }
+        return false
+    }
+
+    /** 每次动作前清一下上次的拒绝原因。 */
+    private fun clearRefusal() { lastRefusal = null }
+
     /* ------------ 读屏幕 ------------ */
 
     /** 屏幕上能看到的文字 + 大概位置（简版，给人和 AI 看）。 */
     fun dump(): String {
+        if (blocked()) {
+            lastRefusal = PetSafety.reason(rootInActiveWindow?.packageName?.toString(), null)
+            return lastRefusal!!
+        }
+        return dumpRaw()
+    }
+
+    /** 不做安全检查的原始读屏（内部用）。 */
+    private fun dumpRaw(): String {
         val root = rootInActiveWindow ?: return "(读不到当前界面)"
         val sb = StringBuilder()
         val seen = HashSet<String>()
@@ -73,6 +126,8 @@ class PetA11yService : AccessibilityService() {
 
     /** 按文字（或描述）点一下。 */
     fun clickText(text: String): Boolean {
+        lastRefusal = null
+        if (guardTap(text)) return false
         val root = rootInActiveWindow ?: return false
         val node = find(root, text, 0) ?: return false
         var cur: AccessibilityNodeInfo? = node
@@ -103,6 +158,7 @@ class PetA11yService : AccessibilityService() {
 
     /** 坐标点按。 */
     fun tap(x: Int, y: Int): Boolean {
+        if (guardScreen()) return false
         val p = Path().apply { moveTo(x.toFloat(), y.toFloat()) }
         val g = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(p, 0, 60)).build()
@@ -111,6 +167,7 @@ class PetA11yService : AccessibilityService() {
 
     /** 滑动（像素坐标）。 */
     fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, ms: Long = 260L): Boolean {
+        if (guardScreen()) return false
         val p = Path().apply { moveTo(x1.toFloat(), y1.toFloat()); lineTo(x2.toFloat(), y2.toFloat()) }
         val g = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(p, 0, ms)).build()
@@ -130,6 +187,7 @@ class PetA11yService : AccessibilityService() {
 
     /** 往当前聚焦的输入框写字。 */
     fun typeText(text: String): Boolean {
+        if (guardScreen()) return false
         val root = rootInActiveWindow ?: return false
         val n = findFocusedEditable(root, 0) ?: return false
         val args = android.os.Bundle()
@@ -149,7 +207,12 @@ class PetA11yService : AccessibilityService() {
 
     /** 按应用名（中文/英文/包名）打开。 */
     fun openApp(nameOrPkg: String): Boolean {
-        val want = nameOrPkg.trim()
+        val want0 = nameOrPkg.trim()
+        if (PetSafety.deniedApp(want0, want0)) {
+            lastRefusal = PetSafety.reason(want0, want0)
+            return false
+        }
+        val want = want0
         if (want.isEmpty()) return false
         // 先当包名试
         val direct = packageManager.getLaunchIntentForPackage(want)

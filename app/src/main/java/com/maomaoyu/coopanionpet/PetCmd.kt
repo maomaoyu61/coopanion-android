@@ -35,7 +35,7 @@ object PetCmd {
         if (t.isEmpty()) return if (woke) "在呢～" else null
         if (t.length < 2) return null
 
-        fun act(ok: Boolean, okMsg: String, failMsg: String) = if (ok) okMsg else failMsg
+        fun act(ok: Boolean, okMsg: String, failMsg: String) = if (ok) okMsg else (s.lastRefusal ?: failMsg)
 
         // 打开应用
         for (p in listOf("帮我打开", "帮我启动", "打开", "启动")) {

@@ -337,16 +337,16 @@ class AssetServer(private val ctx: Context) {
                         }
                         val r = when (path) {
                             "/a11y/dump" -> s.dump()
-                            "/a11y/click" -> if (s.clickText(q("text"))) "ok" else "没找到该文字"
-                            "/a11y/tap" -> if (s.tap(q("x").toIntOrNull() ?: 0, q("y").toIntOrNull() ?: 0)) "ok" else "失败"
+                            "/a11y/click" -> if (s.clickText(q("text"))) "ok" else (s.lastRefusal ?: "没找到该文字")
+                            "/a11y/tap" -> if (s.tap(q("x").toIntOrNull() ?: 0, q("y").toIntOrNull() ?: 0)) "ok" else (s.lastRefusal ?: "失败")
                             "/a11y/swipe" -> if (s.swipe(q("x1").toIntOrNull() ?: 0, q("y1").toIntOrNull() ?: 0,
                                 q("x2").toIntOrNull() ?: 0, q("y2").toIntOrNull() ?: 0)) "ok" else "失败"
                             "/a11y/global" -> {
                                 val w = when (q("which")) { "home" -> 2; "recents" -> 3; "notif" -> 4; else -> 1 }
                                 if (s.global(w)) "ok" else "失败"
                             }
-                            "/a11y/type" -> if (s.typeText(q("text"))) "ok" else "没有聚焦的输入框（或密码框已跳过）"
-                            "/a11y/open" -> if (s.openApp(q("app"))) "ok" else "没找到该应用"
+                            "/a11y/type" -> if (s.typeText(q("text"))) "ok" else (s.lastRefusal ?: "没有聚焦的输入框（或密码框已跳过）")
+                            "/a11y/open" -> if (s.openApp(q("app"))) "ok" else (s.lastRefusal ?: "没找到该应用")
                             else -> "未知接口（dump/click/tap/swipe/global/type/open）"
                         }
                         reply(out, 200, "text/plain; charset=utf-8", r)
