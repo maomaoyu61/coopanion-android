@@ -374,7 +374,7 @@ class AssetServer(private val ctx: Context) {
                 val bubbleCss = if (prefs.getString("bubble_mode", "page") == "native")
                     "<style>#bubble{display:none !important;}</style>" else ""
 
-                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + hostJs + posJs + "</head>")
+                val patched = if (html.contains("</head>")) html.replaceFirst("</head>", css + noHalo + noHover + bubbleCss + glShim + hostJs + posJs + "</head>")
                               else css + noHalo + noHover + bubbleCss + hostJs + posJs + html
                 data = patched.toByteArray(Charsets.UTF_8)
             }

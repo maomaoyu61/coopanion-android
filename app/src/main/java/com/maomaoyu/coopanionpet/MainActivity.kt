@@ -433,6 +433,12 @@ class MainActivity : Activity() {
                     sb.append("版本: " + packageManager.getPackageInfo(packageName, 0).versionName + nl)
                     sb.append("系统: Android " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ")" + nl)
                     sb.append("机型: " + Build.MANUFACTURER + " " + Build.MODEL + nl)
+                    try {
+                        val wv = android.webkit.WebView.getCurrentWebViewPackage()
+                        sb.append("WebView 版本: " + (wv?.versionName ?: "未知") + nl)
+                    } catch (_: Exception) {
+                        sb.append("WebView 版本: 读不到" + nl)
+                    }
                     sb.append("悬浮窗权限: " + (if (Settings.canDrawOverlays(this@MainActivity)) "有" else "没有") + nl)
                     val notifOk = Build.VERSION.SDK_INT < 33 ||
                         checkSelfPermission("android.permission.POST_NOTIFICATIONS") == PackageManager.PERMISSION_GRANTED
