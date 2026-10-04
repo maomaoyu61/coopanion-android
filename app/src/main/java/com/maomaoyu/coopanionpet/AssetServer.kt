@@ -396,6 +396,32 @@ class AssetServer(private val ctx: Context) {
                     log("JS 兼容处理: " + assetPath)
                 }
             }
+            // pet-app.js：把上游网页内部的控制器交出来，原生交互层才能用她自己那套
+            // 抓取/甩出逻辑（不搬窗口，所以有动作动画）。同样不碰上游仓库，只在服务时注入。
+            if (path.endsWith("/pet-app.js")) {
+                val js = String(data, Charsets.UTF_8)
+                val a = js.replaceFirst(
+                    "  roam: prefs.roam,",
+                    "  roam: ((window.__dshPet && window.__dshPet.roam) || prefs.roam),")
+                val b = a.replaceFirst(
+                    "  roam: prefs.roam,",
+                    "  roam: ((window.__dshPet && window.__dshPet.roam) || prefs.roam),")
+                val c = b.replaceFirst(
+                    "const ctl = createPet(",
+                    "window.__dshPet = window.__dshPet || {}; const ctl = createPet(")
+                val d = if (c.contains("window.__dshPet.inner =")) c else c.replaceFirst(
+                    "function applyPrefs(p) {",
+                    "function applyPrefs(p) { window.__dshPet = window.__dshPet || {}; " +
+                        "window.__dshPet.ctl = ctl; window.__dshPet.vp = innerWidth; " +
+                        "window.__dshPet.inner = innerWidth;")
+                if (d != js) {
+                    data = d.toByteArray(Charsets.UTF_8)
+                    log("pet-app.js 注入: 控制器已暴露" +
+                        (if (d.contains("__dshPet.ctl = ctl")) "" else " ⚠ applyPrefs 未匹配"))
+                } else {
+                    log("pet-app.js 注入: ⚠ 上游结构变了，未注入")
+                }
+            }
             if (path.endsWith("/pet.html") || path == "/web/pet.html") {
                 val html = String(data, Charsets.UTF_8)
                 val css = "<style>html,body{background:transparent!important;" +
@@ -433,14 +459,56 @@ class AssetServer(private val ctx: Context) {
                 val noHalo = "<style>#pet,#pet *{filter:none !important;}</style>"
                 val killJs = "<script>window.addEventListener(\"dblclick\",function(e){" +
                     "e.stopPropagation();e.preventDefault();},true);</script>"
-                val posJs = killJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1;" +
-                    "function tick(ts){if(ts-last>100){last=ts;" +
+                // 网页侧握手：把 pet-app.js 里的 ctl 拿到手，并暴露"抓/拖/放"。
+                // 原生交互层（跟手那一小块可触摸窗口）靠它把她拎起来，
+                // 走的是她自己的拖拽动画，不是搬窗口那种平移。
+                val petJs = "<script>" + "(function(){" +
+                    "var p=window.__dshPet=window.__dshPet||{};" +
+                    "p.roam='free';" +
+                    "p.ctl=null;" +
+                    "p.can=function(){return !!(p.ctl&&p.ctl.pet);};" +
+                    // 原生传进来的都是"相对交互层窗口左上角的 CSS 像素"，直接用
+                    "function cv(lx,ly){return {x:lx,y:ly};}" +
+                    "p.grab=function(lx,ly){if(!p.can())return false;" +
+                    "var a=cv(lx,ly),r=p.ctl.pet;" +
+                    // 手指按下的那一点尽量当成抓取点：不在她身上时向她的中心逼近
+                    "var cx=a.x,cy=a.y,i=0,g=false;" +
+                    "for(;i<96;i++){if(p.ctl.hitPet({x:cx,y:cy})){g=true;break;}" +
+                    "cx=a.x+(r.x-a.x)*(1-i/96);cy=a.y+(r.y-a.y)*(1-i/96);}" +
+                    "if(!g){cx=a.x;cy=a.y;}" +
+                    "p.hx=cx-r.x;p.hy=cy-r.y;" +
+                    "p.apx=a.x;p.apy=a.y;" +
+                    "p.ctl.pointerDown({x:cx,y:cy});" +
+                    "p.ctl.pointerMove({x:cx+8,y:cy+8});" +
+                    "p.pt={x:cx,y:cy};p.last=performance.now();" +
+                    "return true;};" +
+                    "p.grabMove=function(lx,ly){if(!p.can())return false;" +
+                    "var a=cv(lx,ly),r=p.ctl.pet;" +
+                    "if(!p.pt){p.pt={x:r.x,y:r.y};p.apx=a.x;p.apy=a.y;}" +
+                    "var dx=a.x-p.apx,dy=a.y-p.apy;" +
+                    "p.apx=a.x;p.apy=a.y;" +
+                    "p.ctl.pointerMove({x:r.x+p.hx+dx,y:r.y+p.hy+dy});" +
+                    "return true;};" +
+                    "p.grabEnd=function(lx,ly){if(!p.can())return false;" +
+                    "var a=cv(lx,ly),now=performance.now();" +
+                    "var dt=Math.max(16,now-(p.last||now));" +
+                    "var vx=((a.x-p.apx)/dt)*1000,vy=((a.y-p.apy)/dt)*1000;" +
+                    "var m=Math.hypot(vx,vy);if(m>1800){vx=vx*1800/m;vy=vy*1800/m;}" +
+                    "p.ctl.pointerUp();" +
+                    "if(p.ctl.dropAt){try{p.ctl.dropAt({x:a.x,y:a.y,vx:vx,vy:vy});}catch(e){}}" +
+                    "p.pt=null;return true;};" +
+                    "p.cancel=function(){if(p.can())try{p.ctl.pointerUp();}catch(e){}p.pt=null;};" +
+                    "})()</script>"
+                val posJs = killJs + petJs + "<script>" + "(function(){var last=0,lx=-1,ly=-1,lw=-1,lh=-1;" +
+                    "function tick(ts){" +
                     "var e=document.getElementById('pet');" +
                     "if(!e||!window.AndroidPet||!window.AndroidPet.pos){window.requestAnimationFrame(tick);return;}" +
+                    "if(ts-last>60||window.__dshPet&&window.__dshPet.pt){last=ts;" +
                     "var r=e.getBoundingClientRect();" +
                     "var x=Math.round(r.left),y=Math.round(r.top),w=Math.round(r.width),h=Math.round(r.height);" +
-                    "if(Math.abs(x-lx)>2||Math.abs(y-ly)>2||w!==lx){lx=x;ly=y;" +
-                    "if(e&&window.AndroidPet&&window.AndroidPet.pos){" +
+                    "if(Math.abs(x-lx)>2||Math.abs(y-ly)>2||w!==lw||h!==lh){lx=x;ly=y;lw=w;lh=h;" +
+                    "if(window.AndroidPet&&window.AndroidPet.pos){" +
+                    "try{if(window.AndroidPet.vp)window.AndroidPet.vp(window.innerWidth);}catch(err){}" +
                     "try{window.AndroidPet.pos(x,y,w,h);}catch(err){}}}}" +
                     "window.requestAnimationFrame(tick);}" +
                     "window.requestAnimationFrame(tick);})()</script>"

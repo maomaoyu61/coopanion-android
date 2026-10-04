@@ -17,6 +17,7 @@ import android.speech.tts.TextToSpeech
 import java.util.Locale
 import android.os.Looper
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.MotionEvent
 import android.view.ViewConfiguration
@@ -43,6 +44,10 @@ import kotlin.math.abs
  *
  * 代价：全屏窗口会吃掉触摸。所以给了开关：
  * 通知栏的「触摸穿透」可以在"能撸桌宠"和"正常用手机"之间切换。
+ *
+ * v4.8 起多了一层：**交互层**（见 addInteractionLayer）——
+ * 一块只有她那么大、跟着她走、始终可触摸的透明窗口，盖在那个整屏穿透窗口之上。
+ * 这样穿透模式下也能直接点她/拎她甩出去，其余区域照样正常操作手机。
  */
 class PetService : Service() {
 
@@ -75,6 +80,22 @@ class PetService : Service() {
     private var bubbleParams_: WindowManager.LayoutParams? = null
     private var btnCollapsed = false
     private var btnSide = 1   // 0=左 1=右
+
+    /* ---- 交互层：跟手的一小块可触摸窗口（见 addInteractionLayer） ---- */
+    private var mid_: View? = null
+    private var midParams_: WindowManager.LayoutParams? = null
+    private var midMoved = false
+    private var midDownX = 0f
+    private var midDownY = 0f
+    private var midDownScreenY = 0f
+    private var midEndScreenY = 0f
+    private var midDownAt = 0L
+    private var lastVp = 0f
+    private var downLx = 0f
+    private var downLy = 0f
+    private var lastMx = 0f
+    private var lastMy = 0f
+    private var lastMoveAt = 0L
     private var btnDownX = 0f
     private var btnDownY = 0f
     private var btnStartX = 0
@@ -359,6 +380,127 @@ class PetService : Service() {
             handler.postDelayed(reminder, 30000)
         }
         addToggleButton(wm)
+        addInteractionLayer(wm)
+    }
+
+    /**
+     * 交互层：一块**跟着她走**的透明可触摸窗口（只有她那么大，加一点余量）。
+     *
+     * 为什么需要它：整屏那层为了全屏漫游必须 FLAG_NOT_TOUCHABLE（见 attachPet 注释），
+     * 代价是"手机能正常用"和"能摸到她"二选一。这一层把两件事拆开了：
+     *
+     *  - 整屏渲染层继续穿透 → 别的 App 照常操作，她的走路动画也照常播；
+     *  - 交互层只占她身体那一块 → 点她、拎起来甩都在这块上完成，窗口之外全穿透。
+     *
+     * 位置靠网页每帧回传的包围盒（AndroidPet.pos）来跟，拖动时反过来把手指位移
+     * 喂回网页（__dshPet.grab/move/release），所以拎起来是网页自己的拖拽动画。
+     */
+    private fun addInteractionLayer(wm: WindowManager) {
+        val v = View(this).apply { setBackgroundColor(0x00000000) }
+        val p = WindowManager.LayoutParams(
+            (resources.displayMetrics.density * 96).toInt(),
+            (resources.displayMetrics.density * 96).toInt(),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = -10000
+            y = 0
+        }
+        val slop = ViewConfiguration.get(this).scaledTouchSlop
+        v.setOnTouchListener { _, ev ->
+            val p2 = midParams_
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    midMoved = false
+                    midDownX = ev.rawX
+                    midDownY = ev.rawY
+                    midDownScreenY = ev.rawY
+                    midEndScreenY = ev.rawY
+                    midDownAt = System.currentTimeMillis()
+                    // 手指落在她身上时，网页的抓取点应当就压在这一下按的地方
+                    val dens = resources.displayMetrics.density
+                    downLx = p2?.let { (ev.rawX - it.x) / dens } ?: 0f
+                    downLy = p2?.let { (ev.rawY - it.y) / dens } ?: 0f
+                    lastMx = ev.rawX
+                    lastMy = ev.rawY
+                    lastMoveAt = System.currentTimeMillis()
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (!midMoved &&
+                        (abs(ev.rawX - midDownX) > slop || abs(ev.rawY - midDownY) > slop)) {
+                        midMoved = true
+                        server?.log("交互层：拎起桌宠")
+                        // 让网页进入她自己的拖拽状态（暂停自由走动 + 换成被拎的姿势）；
+                        // 之后窗口跟着手指走，她看上去就是被拎着甩。
+                        val code = "(function(){var h=window.__dshPet;" +
+                            "if(!h||!h.can())return;" +
+                            "h.grab(${fmt(downLx)},${fmt(downLy)});})()"
+                        try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                    }
+                    if (midMoved) {
+                        val pp = midParams_
+                        if (pp != null) {
+                            midEndScreenY = ev.rawY
+                            pp.x = (pp.x + (ev.rawX - lastMx)).toInt()
+                            pp.y = (pp.y + (ev.rawY - lastMy)).toInt()
+                            lastMx = ev.rawX
+                            lastMy = ev.rawY
+                            try { wm.updateViewLayout(v, pp) } catch (_: Exception) {}
+                            val dens = resources.displayMetrics.density
+                            val code = "(function(){var h=window.__dshPet;" +
+                                "if(!h||!h.can())return;" +
+                                "h.grabMove(${fmt((ev.rawX - pp.x) / dens)},${fmt((ev.rawY - pp.y) / dens)});})()"
+                            try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                        }
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    if (midMoved) {
+                        val dens = resources.displayMetrics.density
+                        val pp = midParams_
+                        val code = (if (ev.actionMasked == MotionEvent.ACTION_UP)
+                            "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
+                                "h.grabEnd(${fmt((ev.rawX - (pp?.x ?: 0)) / dens)},${fmt((ev.rawY - (pp?.y ?: 0)) / dens)});})()"
+                        else
+                            "(function(){var h=window.__dshPet;if(!h||!h.can())return;h.cancel();})()")
+                        try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                    } else if (ev.actionMasked == MotionEvent.ACTION_UP) {
+                        val dt = System.currentTimeMillis() - midDownAt
+                        val dens = resources.displayMetrics.density
+                        val pp = midParams_
+                        // 轻点：在按下的那一点喂一次"按下 + 抬起"，
+                        // 让她自己的摸头/点选逻辑接管（会回一条"戳了你"的事件）。
+                        val lx = fmt((ev.rawX - (pp?.x ?: 0)) / dens)
+                        val ly = fmt((ev.rawY - (pp?.y ?: 0)) / dens)
+                        val code = "(function(){var h=window.__dshPet;if(!h||!h.can())return;" +
+                            "h.grab($lx,$ly);h.grabEnd($lx,$ly);})()"
+                        try { web_?.evaluateJavascript(code, null) } catch (_: Exception) {}
+                        server?.log("交互层：轻点她 (" + dt + "ms)")
+                    }
+                    midMoved = false
+                    true
+                }
+                else -> false
+            }
+        }
+        try {
+            wm.addView(v, p)
+            mid_ = v
+            midParams_ = p
+        } catch (_: Exception) {
+        }
+        applyInteractionVisibility()
+    }
+
+    private fun fmt(f: Float): String {
+        val r = Math.round(f * 100f) / 100f
+        return r.toString()
     }
 
     /** 悬浮小按钮：点一下切换「操作手机 / 摸桌宠」；拖到屏幕左右边缘会自动藏成一条透明小竖条。 */
@@ -663,6 +805,12 @@ class PetService : Service() {
         fun pos(x: Int, y: Int, w: Int, h: Int) {
             handler.post { followPet(x, y, w, h) }
         }
+
+        /** 网页报一次视口宽度（CSS 像素）—— 用来把网页坐标精确换算成屏幕像素。 */
+        @android.webkit.JavascriptInterface
+        fun vp(w: Float) {
+            if (w > 0f) lastVp = w
+        }
     }
 
     private var lastBx = Int.MIN_VALUE
@@ -670,19 +818,44 @@ class PetService : Service() {
 
     private fun followPet(cx: Int, cy: Int, cw: Int, ch: Int) {
         val wm = wm_ ?: return
+        val dm = resources.displayMetrics
+        val sw = dm.widthPixels
+        val sh = dm.heightPixels
+        val sc = if (lastVp > 1f) sw / lastVp else dm.density
+
+        // ① 交互层：跟着她走，永远盖在她身上（这块是唯一接收触摸的区域）
+        val mv = mid_
+        val mp = midParams_
+        if (mv != null && mp != null) {
+            val pad = (dm.density * 10).toInt()
+            val w = (cw * sc).toInt() + pad * 2
+            val h = (ch * sc).toInt() + pad * 2
+            val x = (cx * sc).toInt() - pad
+            val y = (cy * sc).toInt() - pad
+            if (w > 0 && h > 0) {
+                val mx = x.coerceIn(0, (sw - w).coerceAtLeast(0))
+                val my = y.coerceIn(0, (sh - h).coerceAtLeast(0))
+                if (mx != mp.x || my != mp.y || w != mp.width || h != mp.height) {
+                    mp.x = mx
+                    mp.y = my
+                    mp.width = w
+                    mp.height = h
+                    try { wm.updateViewLayout(mv, mp) } catch (_: Exception) {}
+                }
+            }
+        }
+
+        // ② 原生气泡：贴她头顶
         val b = bubble_ ?: return
         val p = bubbleParams_ ?: return
         if (b.visibility != android.view.View.VISIBLE) return
-        val dens = resources.displayMetrics.density
-        val px = (cx * dens).toInt()
-        val py = (cy * dens).toInt()
-        val pw = (cw * dens).toInt()
-        val sw = resources.displayMetrics.widthPixels
-        val bh = if (b.height > 0) b.height else (dens * 64f).toInt()
+        val px = (cx * sc).toInt()
+        val py = (cy * sc).toInt()
+        val pw = (cw * sc).toInt()
+        val bh = if (b.height > 0) b.height else (dm.density * 64f).toInt()
         val bx = (px + pw / 2 - p.width / 2).coerceIn(0, (sw - p.width).coerceAtLeast(0))
-        // 状态条贴她头顶，气泡再叠在状态条上方
         // 气泡贴她头顶；状态条是固定位置（不跟随），所以这里只算气泡
-        val bubbleTop = py - (dens * 8f).toInt()
+        val bubbleTop = py - (dm.density * 8f).toInt()
         val by = (bubbleTop - bh).coerceAtLeast(0)
         if (Math.abs(bx - lastBx) < 1 && Math.abs(by - lastBy) < 1) return
         lastBx = bx
@@ -690,6 +863,12 @@ class PetService : Service() {
         p.x = bx
         p.y = by
         try { wm.updateViewLayout(b, p) } catch (_: Exception) {}
+    }
+
+    /** 交互层只在"触摸穿透"时上岗：不穿透时整屏那层本来就归她，再加一层会互相抢。 */
+    private fun applyInteractionVisibility() {
+        val v = mid_ ?: return
+        v.visibility = if (passthrough) View.VISIBLE else View.GONE
     }
 
     /** 把气泡重新提到最上层（全屏桌宠窗口被 updateViewLayout 时会压住它）。 */
@@ -1507,6 +1686,7 @@ class PetService : Service() {
         } catch (_: Exception) {
         }
         btn_?.let { b -> paintButton(b, passthrough) }
+        applyInteractionVisibility()
         bringButtonToFront()
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.notify(NOTIF_ID, buildNotification())
